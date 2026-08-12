@@ -169,11 +169,16 @@
     display: grid;
     grid-template-columns: repeat(10, 1fr);
     gap: 2px;
+    background-image: url('pixel_art_output.png');
+    background-size: cover;
+    background-position: center;
+    border-radius: 6px;
+    overflow: hidden;
   }
   .cell {
     position: relative;
     aspect-ratio: 1 / 1;
-    background: #3a5c4a;
+    background: rgba(58, 92, 74, 0.2);
     border-radius: 4px;
     display: flex;
     flex-direction: column;
@@ -183,11 +188,14 @@
     line-height: 1;
     text-align: center;
     overflow: hidden;
+    outline: 1px solid rgba(234, 217, 173, 0.15);
   }
-  .cell.event-money { background: #4a6c3a; }
-  .cell.event-loss { background: #6c3a3a; }
-  .cell.event-warp { background: #3a4a6c; }
-  .cell.info { background: #8a6d3b; }
+  .cell.event-money { background: rgba(74, 108, 58, 0.2); }
+  .cell.event-loss { background: rgba(108, 58, 58, 0.2); }
+  .cell.event-warp { background: rgba(58, 74, 108, 0.2); }
+  .cell.info { background: rgba(138, 109, 59, 0.2); }
+  .cell.start { background: rgba(184, 134, 11, 0.2); }
+  .cell.goal { background: rgba(184, 48, 92, 0.2); }
   .cell.info .icon {
     animation: pulse-info 1.6s ease-in-out infinite;
   }
@@ -260,38 +268,6 @@
     border: 1px solid #fff;
     color: transparent;
   }
-
-  /* 伊能図ふうpixelアート */
-  #map-wrap {
-    background: #16281f;
-    border-radius: 14px;
-    padding: 12px;
-    text-align: center;
-  }
-  #map-wrap h2 {
-    font-size: 12px;
-    font-weight: normal;
-    color: #cbb98a;
-    letter-spacing: 0.1em;
-    margin: 0 0 8px;
-  }
-  #map-frame {
-    display: inline-block;
-    padding: 10px;
-    background: #ead9ad;
-    border: 3px double #6b4f2a;
-    border-radius: 4px;
-  }
-  #japan-canvas {
-    image-rendering: pixelated;
-    image-rendering: crisp-edges;
-    display: block;
-  }
-  #map-wrap p {
-    font-size: 10px;
-    color: #8fa08f;
-    margin: 8px 0 0;
-  }
 </style>
 </head>
 <body>
@@ -318,14 +294,6 @@
   <div id="board-wrap">
     <div id="board"></div>
   </div>
-
-  <div id="map-wrap">
-    <h2>伊能図 ふう PIXEL ART（オリジナル生成）</h2>
-    <div id="map-frame">
-      <canvas id="japan-canvas"></canvas>
-    </div>
-    <p>※実際の伊能図の複製ではなく、雰囲気を模したオリジナルの生成アートです</p>
-  </div>
 </div>
 
 <div id="info-overlay" class="hidden">
@@ -343,7 +311,7 @@
    ========================================================= */
 const GRID = 10;
 const PLAYER_COLORS = ['#ff6b6b', '#4dabf7'];
-const PLAYER_NAMES = ['プレイヤー1', 'プレイヤー2'];
+const PLAYER_NAMES = ['伊能忠敬', '松尾芭蕉'];
 
 /* 兵庫県内の史跡（案内マス用データ） */
 const HISTORICAL_SITES = [
@@ -461,7 +429,7 @@ function renderHeader() {
     card.className = 'player-card' + (i === currentPlayer && !gameOver ? ' active' : '');
     card.innerHTML = `
       <div class="name"><span class="dot" style="background:${p.color}"></span>${p.name}</div>
-      <div class="money">¥${p.money.toLocaleString()}</div>
+      <div class="money">${p.money.toLocaleString()} 両</div>
     `;
     headerEl.appendChild(card);
   });
@@ -649,94 +617,13 @@ btnLeft.addEventListener('click', () => tryMove('left'));
 btnRight.addEventListener('click', () => tryMove('right'));
 
 /* =========================================================
-   伊能図ふう pixelアート（実物の複製ではなく、手続き的に
-   生成したオリジナルの日本列島シルエット風ドット絵）
+   伊能図ふうpixelアート（pixel_art_output.png）は
+   #board の background-image として盤面の背景に設定している
    ========================================================= */
-function isLand(x, y) {
-  // 海峡（津軽海峡・関門海峡ふう）で本州と切り離す帯
-  if (y === 9 || y === 10) return false;      // 北海道と本州の間
-  if (y === 32 || y === 33) return false;     // 本州と九州の間
-
-  // 本州〜北海道にかけての大きな弧
-  const mainCenter = 12 + Math.sin(y / 8) * 3 - y * 0.16;
-  const mainWidth = 2 + Math.sin(y / 4) * 0.9;
-  if (y >= 2 && y <= 31 && Math.abs(x - mainCenter) < mainWidth) return true;
-
-  // 北海道の張り出し
-  if (y >= 0 && y <= 8) {
-    const hx = 15 + Math.sin(y / 3) * 1.2;
-    if (Math.abs(x - hx) < 3.2) return true;
-  }
-
-  // 九州・四国ふうの塊
-  if (y >= 34 && y <= 39) {
-    const kx = mainCenter - 1.5;
-    if (Math.abs(x - kx) < 2.6) return true;
-  }
-
-  // 南西諸島ふうの点々
-  if (y >= 41 && y <= 45) {
-    const ox = 4 - (y - 41) * 0.6;
-    if (Math.abs(x - ox) < 0.7) return true;
-  }
-
-  return false;
-}
-
-function drawJapanMap() {
-  const cols = 26;
-  const rows = 46;
-  const px = 6; // 1ドットのピクセルサイズ
-  const canvas = document.getElementById('japan-canvas');
-  canvas.width = cols * px;
-  canvas.height = rows * px;
-  const ctx = canvas.getContext('2d');
-
-  // 背景（古地図の紙色）
-  ctx.fillStyle = '#ead9ad';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  // 測量図ふうのグリッド線
-  ctx.strokeStyle = 'rgba(107, 79, 42, 0.25)';
-  ctx.lineWidth = 1;
-  for (let gx = 0; gx <= cols; gx += 4) {
-    ctx.beginPath();
-    ctx.moveTo(gx * px, 0);
-    ctx.lineTo(gx * px, canvas.height);
-    ctx.stroke();
-  }
-  for (let gy = 0; gy <= rows; gy += 4) {
-    ctx.beginPath();
-    ctx.moveTo(0, gy * px);
-    ctx.lineTo(canvas.width, gy * px);
-    ctx.stroke();
-  }
-
-  // 陸地ドット
-  for (let y = 0; y < rows; y++) {
-    for (let x = 0; x < cols; x++) {
-      if (isLand(x, y)) {
-        ctx.fillStyle = '#5b4632';
-        ctx.fillRect(x * px, y * px, px, px);
-      }
-    }
-  }
-
-  // 海岸線の測量点ふうの赤いドットを少し散らす
-  ctx.fillStyle = '#9c3b2e';
-  for (let y = 2; y < rows - 2; y += 5) {
-    for (let x = 0; x < cols; x++) {
-      if (isLand(x, y) && !isLand(x + 1, y)) {
-        ctx.fillRect(x * px + px / 2 - 1, y * px + px / 2 - 1, 2, 2);
-      }
-    }
-  }
-}
 
 /* ===== 初期描画 ===== */
 renderAll();
 updateDpad();
-drawJapanMap();
 </script>
 </body>
 </html>

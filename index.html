@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>伊能忠敬の浪漫歩行</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Yuji+Syuku&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0;
+    background: #223a2e;
+    font-family: "Hiragino Sans", "Yu Gothic", sans-serif;
+    color: #fff;
+    overscroll-behavior: none;
+    user-select: none;
+  }
+  #app {
+    display: flex;
+    flex-direction: column;
+    min-height: 100dvh;
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 12px;
+    gap: 10px;
+  }
+
+  /* ヘッダー：所持金表示 */
+  #title {
+    font-family: "Yuji Syuku", serif;
+    font-size: 28px;
+    text-align: center;
+    letter-spacing: 0.12em;
+    color: #ead9ad;
+    text-shadow:
+      0 0 1px rgba(0,0,0,0.5),
+      1px 1px 2px rgba(0,0,0,0.4);
+    margin: 4px 0 2px;
+  }
+  #title .sub {
+    display: block;
+    font-family: "Yuji Syuku", serif;
+    font-size: 12px;
+    letter-spacing: 0.3em;
+    color: #8fa08f;
+    margin-top: 2px;
+  }
+  #header {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .player-card {
+    flex: 1;
+    background: #2f4a3c;
+    border-radius: 10px;
+    padding: 8px 10px;
+    font-size: 12px;
+    border: 2px solid transparent;
+  }
+  .player-card.active {
+    border-color: #ffd54f;
+    background: #3a5c4a;
+  }
+  .player-card .name { font-weight: bold; display: flex; align-items: center; gap: 4px; }
+  .player-card .money { font-size: 15px; font-weight: bold; margin-top: 2px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+
+  /* 操作エリア（サイコロ＋方向パッド） */
+  #controls {
+    background: #2f4a3c;
+    border-radius: 14px;
+    padding: 12px;
+    text-align: center;
+  }
+  #message {
+    min-height: 38px;
+    font-size: 13px;
+    margin-bottom: 8px;
+    line-height: 1.4;
+  }
+  #dice-area {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    margin-bottom: 10px;
+  }
+  #dice {
+    width: 50px; height: 50px;
+    background: #fff;
+    color: #222;
+    border-radius: 10px;
+    font-size: 24px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #dice.rolling { animation: shake 0.1s infinite; }
+  @keyframes shake {
+    0% { transform: rotate(0deg); }
+    50% { transform: rotate(10deg); }
+    100% { transform: rotate(-10deg); }
+  }
+  button {
+    font-family: inherit;
+    border: none;
+    border-radius: 10px;
+    padding: 12px 18px;
+    font-size: 15px;
+    font-weight: bold;
+    background: #ffd54f;
+    color: #223a2e;
+    cursor: pointer;
+  }
+  button:disabled {
+    background: #5c5c5c;
+    color: #aaa;
+  }
+  button:active:not(:disabled) { transform: scale(0.94); }
+
+  /* 方向パッド */
+  #dpad {
+    display: grid;
+    grid-template-columns: 48px 48px 48px;
+    grid-template-rows: 48px 48px 48px;
+    gap: 4px;
+    justify-content: center;
+    margin: 0 auto;
+  }
+  #dpad button {
+    padding: 0;
+    font-size: 18px;
+    border-radius: 8px;
+  }
+  #dpad .center {
+    background: #16281f;
+    color: #ffd54f;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: bold;
+    border-radius: 8px;
+  }
+  #btn-up    { grid-column: 2; grid-row: 1; }
+  #btn-left  { grid-column: 1; grid-row: 2; }
+  #btn-center{ grid-column: 2; grid-row: 2; }
+  #btn-right { grid-column: 3; grid-row: 2; }
+  #btn-down  { grid-column: 2; grid-row: 3; }
+
+  #restart-btn {
+    margin-top: 10px;
+    background: #7a90a4;
+    color: #fff;
+    display: none;
+  }
+
+  /* 盤面 */
+  #board-wrap {
+    background: #16281f;
+    border-radius: 14px;
+    padding: 8px;
+  }
+  #board {
+    display: grid;
+    grid-template-columns: repeat(10, 1fr);
+    gap: 2px;
+  }
+  .cell {
+    position: relative;
+    aspect-ratio: 1 / 1;
+    background: #3a5c4a;
+    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-size: 6px;
+    line-height: 1;
+    text-align: center;
+    overflow: hidden;
+  }
+  .cell.event-money { background: #4a6c3a; }
+  .cell.event-loss { background: #6c3a3a; }
+  .cell.event-warp { background: #3a4a6c; }
+  .cell.info { background: #8a6d3b; }
+  .cell.info .icon {
+    animation: pulse-info 1.6s ease-in-out infinite;
+  }
+  @keyframes pulse-info {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.55; }
+  }
+
+  /* 案内カード（史跡ポップアップ） */
+  #info-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 16, 12, 0.72);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    z-index: 50;
+  }
+  #info-overlay.hidden { display: none; }
+  #info-card {
+    background: #ead9ad;
+    color: #3a2c18;
+    border: 3px double #6b4f2a;
+    border-radius: 8px;
+    max-width: 360px;
+    width: 100%;
+    padding: 20px 18px;
+    text-align: center;
+  }
+  #info-card .badge {
+    display: inline-block;
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    color: #8a6d3b;
+    border: 1px solid #8a6d3b;
+    border-radius: 12px;
+    padding: 2px 10px;
+    margin-bottom: 10px;
+  }
+  #info-card h3 {
+    font-family: "Yuji Syuku", serif;
+    font-size: 24px;
+    letter-spacing: 0.08em;
+    margin: 0 0 12px;
+  }
+  #info-card p {
+    font-size: 13px;
+    line-height: 1.7;
+    margin: 0 0 18px;
+    text-align: left;
+  }
+  #info-card button {
+    background: #6b4f2a;
+    color: #ead9ad;
+    width: 100%;
+  }
+  .cell.start { background: #b8860b; }
+  .cell.goal { background: #b8305c; }
+  .cell .icon { font-size: 11px; }
+  .tokens {
+    position: absolute;
+    bottom: 1px;
+    display: flex;
+    gap: 1px;
+  }
+  .token {
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    border: 1px solid #fff;
+    color: transparent;
+  }
+
+  /* 伊能図ふうpixelアート */
+  #map-wrap {
+    background: #16281f;
+    border-radius: 14px;
+    padding: 12px;
+    text-align: center;
+  }
+  #map-wrap h2 {
+    font-size: 12px;
+    font-weight: normal;
+    color: #cbb98a;
+    letter-spacing: 0.1em;
+    margin: 0 0 8px;
+  }
+  #map-frame {
+    display: inline-block;
+    padding: 10px;
+    background: #ead9ad;
+    border: 3px double #6b4f2a;
+    border-radius: 4px;
+  }
+  #japan-canvas {
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    display: block;
+  }
+  #map-wrap p {
+    font-size: 10px;
+    color: #8fa08f;
+    margin: 8px 0 0;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <h1 id="title">伊能忠敬の浪漫歩行<span class="sub">ROMANTIC WALK OF INŌ TADATAKA</span></h1>
+  <div id="header"></div>
+
+  <div id="controls">
+    <div id="message">ゲームを開始します。プレイヤー1の番です。</div>
+    <div id="dice-area">
+      <div id="dice">?</div>
+      <button id="roll-btn">サイコロを振る</button>
+    </div>
+    <div id="dpad">
+      <button id="btn-up">↑</button>
+      <button id="btn-left">←</button>
+      <div id="btn-center" class="center">-</div>
+      <button id="btn-right">→</button>
+      <button id="btn-down">↓</button>
+    </div>
+    <button id="restart-btn">もう一度あそぶ</button>
+  </div>
+
+  <div id="board-wrap">
+    <div id="board"></div>
+  </div>
+
+  <div id="map-wrap">
+    <h2>伊能図 ふう PIXEL ART（オリジナル生成）</h2>
+    <div id="map-frame">
+      <canvas id="japan-canvas"></canvas>
+    </div>
+    <p>※実際の伊能図の複製ではなく、雰囲気を模したオリジナルの生成アートです</p>
+  </div>
+</div>
+
+<div id="info-overlay" class="hidden">
+  <div id="info-card">
+    <span class="badge">兵庫県 史跡案内</span>
+    <h3 id="info-title"></h3>
+    <p id="info-desc"></p>
+    <button id="info-close">とじる</button>
+  </div>
+</div>
+
+<script>
+/* =========================================================
+   盤面設定：10 x 10 = 100マス、座標 (x, y) はどちらも 0〜9
+   ========================================================= */
+const GRID = 10;
+const PLAYER_COLORS = ['#ff6b6b', '#4dabf7'];
+const PLAYER_NAMES = ['プレイヤー1', 'プレイヤー2'];
+
+/* 兵庫県内の史跡（案内マス用データ） */
+const HISTORICAL_SITES = [
+  { title: '姫路城', desc: '白鷺城とも呼ばれる白亜の名城。江戸時代初期の姿をほぼそのまま残す天守群は、日本で最初にユネスコ世界文化遺産に登録された。' },
+  { title: '竹田城跡', desc: '朝霧に包まれると山の上に浮かんで見えることから「天空の城」と呼ばれる山城跡。石垣だけが残り、往時の壮大な姿を今に伝える。' },
+  { title: '明石城', desc: '江戸幕府によって築かれた城で、天守は築かれなかったものの、現存する巽櫓・坤櫓の2つの三重櫓が今も明石のシンボルとして残る。' },
+  { title: '赤穂城跡', desc: '赤穂浪士で知られる赤穂藩の居城跡。忠臣蔵の舞台としても有名で、大石内蔵助ら家臣が仕えた城として語り継がれている。' },
+  { title: '出石城跡・辰鼓楼', desc: '但馬の小京都と呼ばれる出石のシンボル。城下町には時計台「辰鼓楼」がそびえ、古い町並みが今も残っている。' },
+  { title: '篠山城跡', desc: '徳川家康の命により天下普請で築かれた城。大書院が復元され、丹波篠山の城下町の中心として親しまれている。' },
+  { title: '有馬温泉', desc: '日本三古湯の一つに数えられる、1300年以上の歴史を持つ名湯。豊臣秀吉も度々訪れたと伝わる、歴史ある温泉街。' },
+  { title: '伊弉諾神宮', desc: '淡路島にある、日本最古とされる神社の一つ。国生み神話の主神である伊弉諾尊を祀り、古くから信仰を集めてきた。' },
+  { title: '湊川神社', desc: '南北朝時代の武将・楠木正成を祀る神戸の神社。忠義の武将として今も多くの人々に慕われている。' },
+  { title: '生野銀山', desc: '平安時代からの歴史を持つ日本有数の銀山跡。江戸時代には幕府直轄の鉱山として栄え、日本の近代化にも貢献した。' },
+];
+
+function generateBoard() {
+  const board = [];
+  for (let y = 0; y < GRID; y++) {
+    const row = [];
+    for (let x = 0; x < GRID; x++) {
+      if (x === 0 && y === 0) {
+        row.push({ type: 'start', label: 'スタート', icon: '🏁' });
+      } else if (x === GRID - 1 && y === GRID - 1) {
+        row.push({ type: 'goal', label: 'ゴール', icon: '🎌' });
+      } else {
+        const r = Math.random();
+        if (r < 0.18) {
+          const amount = (Math.floor(Math.random() * 4) + 1) * 100;
+          row.push({ type: 'event-money', label: `+${amount}`, icon: '💰', amount });
+        } else if (r < 0.32) {
+          const amount = (Math.floor(Math.random() * 3) + 1) * 100;
+          row.push({ type: 'event-loss', label: `-${amount}`, icon: '💸', amount });
+        } else if (r < 0.40) {
+          row.push({ type: 'event-warp', label: 'ワープ', icon: '🌀' });
+        } else {
+          row.push({ type: 'normal', label: '', icon: '' });
+        }
+      }
+    }
+    board.push(row);
+  }
+
+  // 史跡の案内マス（iマーク）を、スタート・ゴールを除く場所にランダムで10箇所配置
+  const candidates = [];
+  for (let y = 0; y < GRID; y++) {
+    for (let x = 0; x < GRID; x++) {
+      if (!(x === 0 && y === 0) && !(x === GRID - 1 && y === GRID - 1)) {
+        candidates.push({ x, y });
+      }
+    }
+  }
+  for (let i = candidates.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+  }
+  const infoSpots = candidates.slice(0, HISTORICAL_SITES.length);
+  infoSpots.forEach((spot, i) => {
+    board[spot.y][spot.x] = {
+      type: 'info',
+      label: 'i',
+      icon: 'ℹ️',
+      site: HISTORICAL_SITES[i],
+    };
+  });
+
+  return board;
+}
+
+/* ===== 状態 ===== */
+let board = generateBoard();
+let players = PLAYER_NAMES.map((name, i) => ({
+  name, color: PLAYER_COLORS[i], x: 0, y: 0, money: 1000,
+}));
+let currentPlayer = 0;
+let gameOver = false;
+let rolling = false;
+let remainingSteps = 0;
+
+/* ===== DOM参照 ===== */
+const headerEl = document.getElementById('header');
+const boardEl = document.getElementById('board');
+const messageEl = document.getElementById('message');
+const diceEl = document.getElementById('dice');
+const rollBtn = document.getElementById('roll-btn');
+const restartBtn = document.getElementById('restart-btn');
+const centerEl = document.getElementById('btn-center');
+const btnUp = document.getElementById('btn-up');
+const btnDown = document.getElementById('btn-down');
+const btnLeft = document.getElementById('btn-left');
+const btnRight = document.getElementById('btn-right');
+const infoOverlay = document.getElementById('info-overlay');
+const infoTitleEl = document.getElementById('info-title');
+const infoDescEl = document.getElementById('info-desc');
+const infoCloseBtn = document.getElementById('info-close');
+
+/* ===== 史跡案内カード ===== */
+function showInfoCard(site, onClose) {
+  infoTitleEl.textContent = site.title;
+  infoDescEl.textContent = site.desc;
+  infoOverlay.classList.remove('hidden');
+
+  const handler = () => {
+    infoOverlay.classList.add('hidden');
+    infoCloseBtn.removeEventListener('click', handler);
+    onClose();
+  };
+  infoCloseBtn.addEventListener('click', handler);
+}
+
+/* ===== 描画 ===== */
+function renderHeader() {
+  headerEl.innerHTML = '';
+  players.forEach((p, i) => {
+    const card = document.createElement('div');
+    card.className = 'player-card' + (i === currentPlayer && !gameOver ? ' active' : '');
+    card.innerHTML = `
+      <div class="name"><span class="dot" style="background:${p.color}"></span>${p.name}</div>
+      <div class="money">¥${p.money.toLocaleString()}</div>
+    `;
+    headerEl.appendChild(card);
+  });
+}
+
+function renderBoard() {
+  boardEl.innerHTML = '';
+  for (let y = 0; y < GRID; y++) {
+    for (let x = 0; x < GRID; x++) {
+      const cell = board[y][x];
+      const div = document.createElement('div');
+      div.className = 'cell ' + cell.type;
+      const tokensHtml = players
+        .filter(p => p.x === x && p.y === y)
+        .map(p => `<div class="token" style="background:${p.color}"></div>`)
+        .join('');
+      div.innerHTML = `
+        <span class="icon">${cell.icon}</span>
+        <div class="tokens">${tokensHtml}</div>
+      `;
+      boardEl.appendChild(div);
+    }
+  }
+}
+
+function renderAll() {
+  renderHeader();
+  renderBoard();
+}
+
+/* ===== 方向パッドの有効/無効切り替え ===== */
+function updateDpad() {
+  const p = players[currentPlayer];
+  const active = remainingSteps > 0 && !gameOver && !rolling;
+  btnUp.disabled = !active || p.y === 0;
+  btnDown.disabled = !active || p.y === GRID - 1;
+  btnLeft.disabled = !active || p.x === 0;
+  btnRight.disabled = !active || p.x === GRID - 1;
+  centerEl.textContent = remainingSteps > 0 ? `残り${remainingSteps}` : '-';
+}
+
+/* ===== サイコロ ===== */
+function rollDice() {
+  if (rolling || gameOver || remainingSteps > 0) return;
+  rolling = true;
+  rollBtn.disabled = true;
+  diceEl.classList.add('rolling');
+  messageEl.textContent = `${players[currentPlayer].name}がサイコロを振っています…`;
+
+  let ticks = 0;
+  const maxTicks = 10;
+  const interval = setInterval(() => {
+    diceEl.textContent = String(Math.floor(Math.random() * 6) + 1);
+    ticks++;
+    if (ticks >= maxTicks) {
+      clearInterval(interval);
+      const result = Math.floor(Math.random() * 6) + 1;
+      diceEl.textContent = String(result);
+      diceEl.classList.remove('rolling');
+      rolling = false;
+      remainingSteps = result;
+      messageEl.textContent = `${players[currentPlayer].name}：残り${result}歩。上下左右に自由に進もう！`;
+      updateDpad();
+    }
+  }, 80);
+}
+
+/* ===== 移動 ===== */
+function tryMove(dir) {
+  if (remainingSteps <= 0 || gameOver || rolling) return;
+  const player = players[currentPlayer];
+  let { x, y } = player;
+  if (dir === 'up') y -= 1;
+  else if (dir === 'down') y += 1;
+  else if (dir === 'left') x -= 1;
+  else if (dir === 'right') x += 1;
+  if (x < 0 || x > GRID - 1 || y < 0 || y > GRID - 1) return;
+
+  const isGoalCell = (x === GRID - 1 && y === GRID - 1);
+  const stepsLeftAfter = remainingSteps - 1;
+
+  // ゴールはぴったりの目でないと入れない（余ったらその方向には進めない）
+  if (isGoalCell && stepsLeftAfter > 0) {
+    messageEl.textContent = `ちょうどの目でないとゴールできません！（あと${stepsLeftAfter}歩余ってしまいます）`;
+    return;
+  }
+
+  player.x = x;
+  player.y = y;
+  remainingSteps = stepsLeftAfter;
+  renderAll();
+  updateDpad();
+
+  if (isGoalCell || remainingSteps === 0) {
+    landOnCell(player);
+  }
+}
+
+function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+
+function landOnCell(player) {
+  const cell = board[player.y][player.x];
+  let msg = `${player.name}は (${player.x}, ${player.y}) 「${cell.label || 'なにもなし'}」に止まった。`;
+
+  if (cell.type === 'event-money') {
+    player.money += cell.amount;
+    msg += ` ¥${cell.amount}もらった！`;
+  } else if (cell.type === 'event-loss') {
+    player.money = Math.max(0, player.money - cell.amount);
+    msg += ` ¥${cell.amount}失った…`;
+  } else if (cell.type === 'event-warp') {
+    const nx = clamp(player.x + (Math.floor(Math.random() * 7) - 3), 0, GRID - 1);
+    const ny = clamp(player.y + (Math.floor(Math.random() * 7) - 3), 0, GRID - 1);
+    player.x = nx;
+    player.y = ny;
+    msg += ` ワープして (${nx}, ${ny}) へ！`;
+  } else if (cell.type === 'goal') {
+    msg += ' ゴール！';
+  } else if (cell.type === 'info') {
+    msg += ' 案内板を見つけた！';
+  }
+
+  remainingSteps = 0;
+  renderAll();
+  updateDpad();
+  messageEl.textContent = msg;
+
+  if (player.x === GRID - 1 && player.y === GRID - 1) {
+    endGame();
+    return;
+  }
+
+  if (cell.type === 'info') {
+    showInfoCard(cell.site, () => {
+      rollBtn.disabled = false;
+      nextTurn();
+    });
+    return;
+  }
+
+  rollBtn.disabled = false;
+  nextTurn();
+}
+
+function nextTurn() {
+  currentPlayer = (currentPlayer + 1) % players.length;
+  renderHeader();
+  updateDpad();
+  messageEl.textContent += ` 次は${players[currentPlayer].name}の番です。`;
+}
+
+function endGame() {
+  gameOver = true;
+  rollBtn.disabled = true;
+  restartBtn.style.display = 'inline-block';
+  const winner = players[currentPlayer];
+  messageEl.textContent += ` ${winner.name}のゴール！ゲーム終了🎉`;
+  renderHeader();
+  updateDpad();
+}
+
+function restartGame() {
+  board = generateBoard();
+  players = PLAYER_NAMES.map((name, i) => ({
+    name, color: PLAYER_COLORS[i], x: 0, y: 0, money: 1000,
+  }));
+  currentPlayer = 0;
+  gameOver = false;
+  rolling = false;
+  remainingSteps = 0;
+  diceEl.textContent = '?';
+  rollBtn.disabled = false;
+  restartBtn.style.display = 'none';
+  messageEl.textContent = 'ゲームを開始します。プレイヤー1の番です。';
+  renderAll();
+  updateDpad();
+}
+
+/* ===== イベント登録 ===== */
+rollBtn.addEventListener('click', rollDice);
+restartBtn.addEventListener('click', restartGame);
+btnUp.addEventListener('click', () => tryMove('up'));
+btnDown.addEventListener('click', () => tryMove('down'));
+btnLeft.addEventListener('click', () => tryMove('left'));
+btnRight.addEventListener('click', () => tryMove('right'));
+
+/* =========================================================
+   伊能図ふう pixelアート（実物の複製ではなく、手続き的に
+   生成したオリジナルの日本列島シルエット風ドット絵）
+   ========================================================= */
+function isLand(x, y) {
+  // 海峡（津軽海峡・関門海峡ふう）で本州と切り離す帯
+  if (y === 9 || y === 10) return false;      // 北海道と本州の間
+  if (y === 32 || y === 33) return false;     // 本州と九州の間
+
+  // 本州〜北海道にかけての大きな弧
+  const mainCenter = 12 + Math.sin(y / 8) * 3 - y * 0.16;
+  const mainWidth = 2 + Math.sin(y / 4) * 0.9;
+  if (y >= 2 && y <= 31 && Math.abs(x - mainCenter) < mainWidth) return true;
+
+  // 北海道の張り出し
+  if (y >= 0 && y <= 8) {
+    const hx = 15 + Math.sin(y / 3) * 1.2;
+    if (Math.abs(x - hx) < 3.2) return true;
+  }
+
+  // 九州・四国ふうの塊
+  if (y >= 34 && y <= 39) {
+    const kx = mainCenter - 1.5;
+    if (Math.abs(x - kx) < 2.6) return true;
+  }
+
+  // 南西諸島ふうの点々
+  if (y >= 41 && y <= 45) {
+    const ox = 4 - (y - 41) * 0.6;
+    if (Math.abs(x - ox) < 0.7) return true;
+  }
+
+  return false;
+}
+
+function drawJapanMap() {
+  const cols = 26;
+  const rows = 46;
+  const px = 6; // 1ドットのピクセルサイズ
+  const canvas = document.getElementById('japan-canvas');
+  canvas.width = cols * px;
+  canvas.height = rows * px;
+  const ctx = canvas.getContext('2d');
+
+  // 背景（古地図の紙色）
+  ctx.fillStyle = '#ead9ad';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // 測量図ふうのグリッド線
+  ctx.strokeStyle = 'rgba(107, 79, 42, 0.25)';
+  ctx.lineWidth = 1;
+  for (let gx = 0; gx <= cols; gx += 4) {
+    ctx.beginPath();
+    ctx.moveTo(gx * px, 0);
+    ctx.lineTo(gx * px, canvas.height);
+    ctx.stroke();
+  }
+  for (let gy = 0; gy <= rows; gy += 4) {
+    ctx.beginPath();
+    ctx.moveTo(0, gy * px);
+    ctx.lineTo(canvas.width, gy * px);
+    ctx.stroke();
+  }
+
+  // 陸地ドット
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      if (isLand(x, y)) {
+        ctx.fillStyle = '#5b4632';
+        ctx.fillRect(x * px, y * px, px, px);
+      }
+    }
+  }
+
+  // 海岸線の測量点ふうの赤いドットを少し散らす
+  ctx.fillStyle = '#9c3b2e';
+  for (let y = 2; y < rows - 2; y += 5) {
+    for (let x = 0; x < cols; x++) {
+      if (isLand(x, y) && !isLand(x + 1, y)) {
+        ctx.fillRect(x * px + px / 2 - 1, y * px + px / 2 - 1, 2, 2);
+      }
+    }
+  }
+}
+
+/* ===== 初期描画 ===== */
+renderAll();
+updateDpad();
+drawJapanMap();
+</script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+# 以下のフォルダ内の全てのファイル
+_old/*
+_python/*
+_working_dir/*
+_pdf/*
+_xlsx/*
+
+# 以下の拡張子を持つすべてのファイル
+*.xlsx
+*.pptx

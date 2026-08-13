@@ -27,7 +27,7 @@
     gap: 10px;
   }
 
-  /* ヘッダー：所持金表示 */
+  /* タイトル */
   #title {
     font-family: "Yuji Syuku", serif;
     font-size: 28px;
@@ -47,6 +47,8 @@
     color: #8fa08f;
     margin-top: 2px;
   }
+
+  /* ヘッダー：所持金表示 */
   #header {
     display: flex;
     justify-content: space-between;
@@ -159,43 +161,56 @@
     display: none;
   }
 
-  /* 盤面 */
+  /* 盤面（カメラ追従ビューポート） */
   #board-wrap {
     background: #16281f;
     border-radius: 14px;
-    padding: 8px;
+    padding: 10px;
+    display: flex;
+    justify-content: center;
+  }
+  #board-viewport {
+    width: 300px;
+    height: 300px;
+    overflow: hidden;
+    position: relative;
+    border-radius: 10px;
+    box-shadow: inset 0 0 0 2px rgba(234, 217, 173, 0.3);
   }
   #board {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 750px;
+    height: 750px;
+    transform-origin: 0 0;
     display: grid;
-    grid-template-columns: repeat(10, 1fr);
-    gap: 2px;
+    grid-template-columns: repeat(10, 75px);
+    grid-template-rows: repeat(10, 75px);
     background-image: url('pixel_art_output.png');
     background-size: cover;
     background-position: center;
-    border-radius: 6px;
-    overflow: hidden;
+    transition: transform 0.5s ease;
+    will-change: transform;
   }
   .cell {
     position: relative;
-    aspect-ratio: 1 / 1;
-    background: rgba(58, 92, 74, 0.2);
-    border-radius: 4px;
+    width: 75px;
+    height: 75px;
+    background: rgba(58, 92, 74, 0.45);
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    font-size: 6px;
-    line-height: 1;
-    text-align: center;
     overflow: hidden;
     outline: 1px solid rgba(234, 217, 173, 0.15);
   }
-  .cell.event-money { background: rgba(74, 108, 58, 0.2); }
-  .cell.event-loss { background: rgba(108, 58, 58, 0.2); }
-  .cell.event-warp { background: rgba(58, 74, 108, 0.2); }
-  .cell.info { background: rgba(138, 109, 59, 0.2); }
-  .cell.start { background: rgba(184, 134, 11, 0.2); }
-  .cell.goal { background: rgba(184, 48, 92, 0.2); }
+  .cell.event-money { background: rgba(74, 108, 58, 0.55); }
+  .cell.event-loss { background: rgba(108, 58, 58, 0.55); }
+  .cell.event-warp { background: rgba(58, 74, 108, 0.55); }
+  .cell.info { background: rgba(138, 109, 59, 0.62); }
+  .cell.start { background: rgba(184, 134, 11, 0.55); }
+  .cell.goal { background: rgba(184, 48, 92, 0.55); }
   .cell.info .icon {
     animation: pulse-info 1.6s ease-in-out infinite;
   }
@@ -203,6 +218,39 @@
     0%, 100% { opacity: 1; }
     50% { opacity: 0.55; }
   }
+  .cell .icon { font-size: 20px; display: flex; align-items: center; justify-content: center; }
+  .cell .icon svg { display: block; }
+  .tokens {
+    position: absolute;
+    bottom: 3px;
+    display: flex;
+    gap: 2px;
+  }
+  .token {
+    width: 13px; height: 13px;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+  }
+
+  /* カメラ切り替えボタン */
+  #camera-controls {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  #camera-controls button {
+    background: #7a90a4;
+    color: #fff;
+    font-size: 13px;
+    padding: 8px 16px;
+  }
+  #camera-controls button.active-mode {
+    background: #ffd54f;
+    color: #223a2e;
+  }
+
 
   /* 案内カード（史跡ポップアップ） */
   #info-overlay {
@@ -253,21 +301,6 @@
     color: #ead9ad;
     width: 100%;
   }
-  .cell.start { background: #b8860b; }
-  .cell.goal { background: #b8305c; }
-  .cell .icon { font-size: 16px; }
-  .tokens {
-    position: absolute;
-    bottom: 1px;
-    display: flex;
-    gap: 1px;
-  }
-  .token {
-    width: 15px; height: 15px;
-    border-radius: 50%;
-    border: 1px solid #fff;
-    color: transparent;
-  }
 </style>
 </head>
 <body>
@@ -292,7 +325,13 @@
   </div>
 
   <div id="board-wrap">
-    <div id="board"></div>
+    <div id="board-viewport">
+      <div id="board"></div>
+    </div>
+  </div>
+  <div id="camera-controls">
+    <button id="btn-overview">🗺️ 全体</button>
+    <button id="btn-follow" class="active-mode">📍 現在地</button>
   </div>
 </div>
 
@@ -308,10 +347,32 @@
 <script>
 /* =========================================================
    盤面設定：10 x 10 = 100マス、座標 (x, y) はどちらも 0〜9
+   カメラは常に「現在の手番のキャラクター」を中心に映す
    ========================================================= */
 const GRID = 10;
+const CELL_SIZE = 75;                  // 1マスのピクセルサイズ
+const WORLD_SIZE = CELL_SIZE * GRID;   // 盤面全体のピクセルサイズ (750px)
+const VIEWPORT_SIZE = 300;             // 実際に画面に見えている窓のサイズ
+// WORLD_SIZE / VIEWPORT_SIZE = 2.5 → 背景画像が約2.5倍に拡大されて、その一部だけが見えている状態
 const PLAYER_COLORS = ['#ff6b6b', '#4dabf7'];
-const PLAYER_NAMES = ['伊能忠敬', '松尾芭蕉'];
+const PLAYER_NAMES = ['プレイヤー1', 'プレイヤー2'];
+
+/* 小判アイコン（オリジナルの簡易SVG。楕円形に「壱」を思わせる刻印を入れた江戸小判ふうデザイン） */
+const KOBAN_SVG = `<svg viewBox="0 0 40 24" width="20" height="14" xmlns="http://www.w3.org/2000/svg">
+  <ellipse cx="20" cy="12" rx="18" ry="10" fill="#e8c250" stroke="#8a6a1f" stroke-width="1.5"/>
+  <ellipse cx="20" cy="12" rx="13" ry="6.5" fill="none" stroke="#8a6a1f" stroke-width="1"/>
+  <circle cx="20" cy="12" r="2" fill="#8a6a1f"/>
+</svg>`;
+
+/* 小判が飛んでいくアイコン（お金を失うマス用。小判の両側に羽を付けたデザイン） */
+const FLYING_KOBAN_SVG = `<svg viewBox="0 0 48 24" width="24" height="12" xmlns="http://www.w3.org/2000/svg">
+  <path d="M8 12 C4 6, 0 8, 2 13 C4 17, 8 15, 8 12 Z" fill="#e8dcc0" stroke="#8a6a1f" stroke-width="1"/>
+  <path d="M40 12 C44 6, 48 8, 46 13 C44 17, 40 15, 40 12 Z" fill="#e8dcc0" stroke="#8a6a1f" stroke-width="1"/>
+  <ellipse cx="24" cy="12" rx="14" ry="8" fill="#e8c250" stroke="#8a6a1f" stroke-width="1.5"/>
+  <ellipse cx="24" cy="12" rx="10" ry="5" fill="none" stroke="#8a6a1f" stroke-width="1"/>
+  <circle cx="24" cy="12" r="1.6" fill="#8a6a1f"/>
+</svg>`;
+
 
 /* 兵庫県内の史跡（案内マス用データ） */
 const HISTORICAL_SITES = [
@@ -327,23 +388,49 @@ const HISTORICAL_SITES = [
   { title: '生野銀山', desc: '平安時代からの歴史を持つ日本有数の銀山跡。江戸時代には幕府直轄の鉱山として栄え、日本の近代化にも貢献した。' },
 ];
 
+/* ===== スタート・ゴールをランダムに決める ===== */
+let STARTPOS = null;
+let GOALPOS = null;
+
+function randomPos() {
+  return { x: Math.floor(Math.random() * GRID), y: Math.floor(Math.random() * GRID) };
+}
+function manhattan(a, b) {
+  return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+}
+function pickStartAndGoal() {
+  const start = randomPos();
+  let goal = randomPos();
+  let tries = 0;
+  // ある程度離れた場所をゴールにする（近すぎるとすぐ終わってしまうため）
+  while (manhattan(start, goal) < 8 && tries < 300) {
+    goal = randomPos();
+    tries++;
+  }
+  return { start, goal };
+}
+
 function generateBoard() {
+  const { start, goal } = pickStartAndGoal();
+  STARTPOS = start;
+  GOALPOS = goal;
+
   const board = [];
   for (let y = 0; y < GRID; y++) {
     const row = [];
     for (let x = 0; x < GRID; x++) {
-      if (x === 0 && y === 0) {
+      if (x === start.x && y === start.y) {
         row.push({ type: 'start', label: 'スタート', icon: '🏁' });
-      } else if (x === GRID - 1 && y === GRID - 1) {
+      } else if (x === goal.x && y === goal.y) {
         row.push({ type: 'goal', label: 'ゴール', icon: '🎌' });
       } else {
         const r = Math.random();
         if (r < 0.18) {
           const amount = (Math.floor(Math.random() * 4) + 1) * 100;
-          row.push({ type: 'event-money', label: `+${amount}`, icon: '💰', amount });
+          row.push({ type: 'event-money', label: `+${amount}`, icon: KOBAN_SVG, amount });
         } else if (r < 0.32) {
           const amount = (Math.floor(Math.random() * 3) + 1) * 100;
-          row.push({ type: 'event-loss', label: `-${amount}`, icon: '💸', amount });
+          row.push({ type: 'event-loss', label: `-${amount}`, icon: FLYING_KOBAN_SVG, amount });
         } else if (r < 0.40) {
           row.push({ type: 'event-warp', label: 'ワープ', icon: '🌀' });
         } else {
@@ -358,7 +445,9 @@ function generateBoard() {
   const candidates = [];
   for (let y = 0; y < GRID; y++) {
     for (let x = 0; x < GRID; x++) {
-      if (!(x === 0 && y === 0) && !(x === GRID - 1 && y === GRID - 1)) {
+      const isStart = (x === start.x && y === start.y);
+      const isGoal = (x === goal.x && y === goal.y);
+      if (!isStart && !isGoal) {
         candidates.push({ x, y });
       }
     }
@@ -383,7 +472,7 @@ function generateBoard() {
 /* ===== 状態 ===== */
 let board = generateBoard();
 let players = PLAYER_NAMES.map((name, i) => ({
-  name, color: PLAYER_COLORS[i], x: 0, y: 0, money: 1000,
+  name, color: PLAYER_COLORS[i], x: STARTPOS.x, y: STARTPOS.y, money: 1000,
 }));
 let currentPlayer = 0;
 let gameOver = false;
@@ -406,6 +495,40 @@ const infoOverlay = document.getElementById('info-overlay');
 const infoTitleEl = document.getElementById('info-title');
 const infoDescEl = document.getElementById('info-desc');
 const infoCloseBtn = document.getElementById('info-close');
+const btnOverview = document.getElementById('btn-overview');
+const btnFollow = document.getElementById('btn-follow');
+
+/* ===== カメラ（現在のキャラクターを中心に映す／全体を見る） ===== */
+let cameraMode = 'follow'; // 'follow' | 'overview'
+
+function centerCameraOn(x, y) {
+  cameraMode = 'follow';
+  btnFollow.classList.add('active-mode');
+  btnOverview.classList.remove('active-mode');
+
+  const cellCenterX = (x + 0.5) * CELL_SIZE;
+  const cellCenterY = (y + 0.5) * CELL_SIZE;
+  let tx = VIEWPORT_SIZE / 2 - cellCenterX;
+  let ty = VIEWPORT_SIZE / 2 - cellCenterY;
+  const minT = VIEWPORT_SIZE - WORLD_SIZE; // 端でこれ以上は動かさない
+  tx = Math.max(minT, Math.min(0, tx));
+  ty = Math.max(minT, Math.min(0, ty));
+  boardEl.style.transform = `translate(${tx}px, ${ty}px) scale(1)`;
+}
+
+function showOverview() {
+  cameraMode = 'overview';
+  btnOverview.classList.add('active-mode');
+  btnFollow.classList.remove('active-mode');
+
+  const s = VIEWPORT_SIZE / WORLD_SIZE;
+  boardEl.style.transform = `translate(0px, 0px) scale(${s})`;
+}
+
+function showCurrentLocation() {
+  const p = players[currentPlayer];
+  centerCameraOn(p.x, p.y);
+}
 
 /* ===== 史跡案内カード ===== */
 function showInfoCard(site, onClose) {
@@ -429,7 +552,7 @@ function renderHeader() {
     card.className = 'player-card' + (i === currentPlayer && !gameOver ? ' active' : '');
     card.innerHTML = `
       <div class="name"><span class="dot" style="background:${p.color}"></span>${p.name}</div>
-      <div class="money">${p.money.toLocaleString()} 両</div>
+      <div class="money">¥${p.money.toLocaleString()}</div>
     `;
     headerEl.appendChild(card);
   });
@@ -508,7 +631,7 @@ function tryMove(dir) {
   else if (dir === 'right') x += 1;
   if (x < 0 || x > GRID - 1 || y < 0 || y > GRID - 1) return;
 
-  const isGoalCell = (x === GRID - 1 && y === GRID - 1);
+  const isGoalCell = (x === GOALPOS.x && y === GOALPOS.y);
   const stepsLeftAfter = remainingSteps - 1;
 
   // ゴールはぴったりの目でないと入れない（余ったらその方向には進めない）
@@ -522,6 +645,7 @@ function tryMove(dir) {
   remainingSteps = stepsLeftAfter;
   renderAll();
   updateDpad();
+  centerCameraOn(player.x, player.y);
 
   if (isGoalCell || remainingSteps === 0) {
     landOnCell(player);
@@ -536,10 +660,10 @@ function landOnCell(player) {
 
   if (cell.type === 'event-money') {
     player.money += cell.amount;
-    msg += ` 両${cell.amount}もらった！`;
+    msg += ` ¥${cell.amount}もらった！`;
   } else if (cell.type === 'event-loss') {
     player.money = Math.max(0, player.money - cell.amount);
-    msg += ` 両${cell.amount}失った…`;
+    msg += ` ¥${cell.amount}失った…`;
   } else if (cell.type === 'event-warp') {
     const nx = clamp(player.x + (Math.floor(Math.random() * 7) - 3), 0, GRID - 1);
     const ny = clamp(player.y + (Math.floor(Math.random() * 7) - 3), 0, GRID - 1);
@@ -555,9 +679,10 @@ function landOnCell(player) {
   remainingSteps = 0;
   renderAll();
   updateDpad();
+  centerCameraOn(player.x, player.y);
   messageEl.textContent = msg;
 
-  if (player.x === GRID - 1 && player.y === GRID - 1) {
+  if (player.x === GOALPOS.x && player.y === GOALPOS.y) {
     endGame();
     return;
   }
@@ -578,6 +703,9 @@ function nextTurn() {
   currentPlayer = (currentPlayer + 1) % players.length;
   renderHeader();
   updateDpad();
+  // サイコロの番が回ってきたキャラクターを画面中央に持ってくる
+  const p = players[currentPlayer];
+  centerCameraOn(p.x, p.y);
   messageEl.textContent += ` 次は${players[currentPlayer].name}の番です。`;
 }
 
@@ -594,7 +722,7 @@ function endGame() {
 function restartGame() {
   board = generateBoard();
   players = PLAYER_NAMES.map((name, i) => ({
-    name, color: PLAYER_COLORS[i], x: 0, y: 0, money: 1000,
+    name, color: PLAYER_COLORS[i], x: STARTPOS.x, y: STARTPOS.y, money: 1000,
   }));
   currentPlayer = 0;
   gameOver = false;
@@ -603,9 +731,10 @@ function restartGame() {
   diceEl.textContent = '?';
   rollBtn.disabled = false;
   restartBtn.style.display = 'none';
-  messageEl.textContent = 'ゲームを開始します。プレイヤー1の番です。';
+  messageEl.textContent = `新しいスタート(${STARTPOS.x}, ${STARTPOS.y})とゴール(${GOALPOS.x}, ${GOALPOS.y})でゲームを開始します。プレイヤー1の番です。`;
   renderAll();
   updateDpad();
+  centerCameraOn(players[currentPlayer].x, players[currentPlayer].y);
 }
 
 /* ===== イベント登録 ===== */
@@ -615,15 +744,24 @@ btnUp.addEventListener('click', () => tryMove('up'));
 btnDown.addEventListener('click', () => tryMove('down'));
 btnLeft.addEventListener('click', () => tryMove('left'));
 btnRight.addEventListener('click', () => tryMove('right'));
+btnOverview.addEventListener('click', showOverview);
+btnFollow.addEventListener('click', showCurrentLocation);
 
 /* =========================================================
    伊能図ふうpixelアート（pixel_art_output.png）は
-   #board の background-image として盤面の背景に設定している
+   #board の background-image として設定し、
+   #board-viewport（300px四方）という小さな窓から
+   750px四方の盤面の一部だけが見える形にしている
+   （WORLD_SIZE / VIEWPORT_SIZE = 2.5 → 背景が約2.5倍に拡大された状態）
+   「全体」ボタンで scale を縮小して盤面全体を、
+   「現在地」ボタンで現在の手番のキャラクターにカメラを戻す
    ========================================================= */
 
 /* ===== 初期描画 ===== */
+messageEl.textContent = `スタート(${STARTPOS.x}, ${STARTPOS.y})からゴール(${GOALPOS.x}, ${GOALPOS.y})を目指そう。プレイヤー1の番です。`;
 renderAll();
 updateDpad();
+centerCameraOn(players[currentPlayer].x, players[currentPlayer].y);
 </script>
 </body>
 </html>

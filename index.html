@@ -363,7 +363,14 @@ const WORLD_SIZE = CELL_SIZE * GRID;   // 盤面全体のピクセルサイズ (
 const VIEWPORT_SIZE = 300;             // 実際に画面に見えている窓のサイズ
 // WORLD_SIZE / VIEWPORT_SIZE = 2.5 → 背景画像が約2.5倍に拡大されて、その一部だけが見えている状態
 const PLAYER_COLORS = ['#ff6b6b', '#4dabf7'];
-const PLAYER_AVATARS = ['player_01.png', 'player_02.png'];
+/* 方向ごとの静止画（D=下/停止時, U=上, L=左, R=右） */
+const PLAYER_DIRECTION_IMAGES = [
+  { down: 'player_01_D.png', up: 'player_01_U.png', left: 'player_01_L.png', right: 'player_01_R.png' },
+  { down: 'player_02_D.png', up: 'player_02_U.png', left: 'player_02_L.png', right: 'player_02_R.png' },
+];
+function getPlayerImage(player) {
+  return PLAYER_DIRECTION_IMAGES[player.idx][player.facing];
+}
 const PLAYER_NAMES = ['武士', '町娘'];
 
 /* 小判アイコン（ユーザー作成のオリジナル画像ファイルを参照） */
@@ -469,7 +476,7 @@ function generateBoard() {
 /* ===== 状態 ===== */
 let board = generateBoard();
 let players = PLAYER_NAMES.map((name, i) => ({
-  name, color: PLAYER_COLORS[i], avatar: PLAYER_AVATARS[i], x: STARTPOS.x, y: STARTPOS.y, money: 1000,
+  name, color: PLAYER_COLORS[i], idx: i, facing: 'down', x: STARTPOS.x, y: STARTPOS.y, money: 1000,
 }));
 let currentPlayer = 0;
 let gameOver = false;
@@ -564,7 +571,7 @@ function renderBoard() {
       div.className = 'cell ' + cell.type;
       const tokensHtml = players
         .filter(p => p.x === x && p.y === y)
-        .map(p => `<img class="token" src="${p.avatar}" alt="${p.name}">`)
+        .map(p => `<img class="token" src="${getPlayerImage(p)}" alt="${p.name}">`)
         .join('');
       div.innerHTML = `
         <span class="icon">${cell.icon}</span>
@@ -622,6 +629,7 @@ function tryMove(dir) {
   if (remainingSteps <= 0 || gameOver || rolling) return;
   const player = players[currentPlayer];
   let { x, y } = player;
+  player.facing = dir;
   if (dir === 'up') y -= 1;
   else if (dir === 'down') y += 1;
   else if (dir === 'left') x -= 1;
@@ -674,6 +682,7 @@ function landOnCell(player) {
   }
 
   remainingSteps = 0;
+  player.facing = 'down';
   renderAll();
   updateDpad();
   centerCameraOn(player.x, player.y);
@@ -721,7 +730,7 @@ function endGame() {
 function restartGame() {
   board = generateBoard();
   players = PLAYER_NAMES.map((name, i) => ({
-    name, color: PLAYER_COLORS[i], avatar: PLAYER_AVATARS[i], x: STARTPOS.x, y: STARTPOS.y, money: 1000,
+    name, color: PLAYER_COLORS[i], idx: i, facing: 'down', x: STARTPOS.x, y: STARTPOS.y, money: 1000,
   }));
   currentPlayer = 0;
   gameOver = false;

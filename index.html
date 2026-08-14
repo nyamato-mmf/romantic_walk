@@ -190,7 +190,7 @@
     background-image: url('pixel_art_output.png');
     background-size: cover;
     background-position: center;
-    transition: transform 0.5s ease;
+    transition: transform 1.6s cubic-bezier(0.4, 0.0, 0.2, 1);
     will-change: transform;
   }
   .cell {
@@ -700,10 +700,12 @@ function nextTurn() {
   currentPlayer = (currentPlayer + 1) % players.length;
   renderHeader();
   updateDpad();
-  // サイコロの番が回ってきたキャラクターを画面中央に持ってくる
-  const p = players[currentPlayer];
-  centerCameraOn(p.x, p.y);
   messageEl.textContent += ` 次は${players[currentPlayer].name}の番です。`;
+  // 少し間を置いてから、ゆっくりカメラを次のキャラクターへパンする
+  setTimeout(() => {
+    const p = players[currentPlayer];
+    centerCameraOn(p.x, p.y);
+  }, 400);
 }
 
 function endGame() {

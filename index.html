@@ -170,7 +170,7 @@
     justify-content: center;
   }
   #board-viewport {
-    width: 300px;
+    width: 440px;
     height: 300px;
     overflow: hidden;
     position: relative;
@@ -197,19 +197,19 @@
     position: relative;
     width: 75px;
     height: 75px;
-    background: rgba(58, 92, 74, 0.45);
+    background: rgba(58, 92, 74, 0.2);
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     overflow: hidden;
-    outline: 1px solid rgba(234, 217, 173, 0.15);
+    outline: 1px solid rgba(234, 217, 173, 0.3);
   }
-  .cell.event-money { background: rgba(74, 108, 58, 0.55); }
-  .cell.event-loss { background: rgba(108, 58, 58, 0.55); }
-  .cell.event-warp { background: rgba(58, 74, 108, 0.55); }
-  .cell.info { background: rgba(138, 109, 59, 0.62); }
-  .cell.start { background: rgba(184, 134, 11, 0.55); }
+  .cell.event-money { background: rgba(74, 108, 58, 0.3); }
+  .cell.event-loss { background: rgba(108, 58, 58, 0.3); }
+  .cell.event-warp { background: rgba(58, 74, 108, 0.3); }
+  .cell.info { background: rgba(138, 109, 59, 0.3); }
+  .cell.start { background: rgba(184, 134, 11, 0.2); }
   .cell.goal { background: rgba(184, 48, 92, 0.55); }
   .cell.info .icon {
     animation: pulse-info 1.6s ease-in-out infinite;
@@ -218,19 +218,27 @@
     0%, 100% { opacity: 1; }
     50% { opacity: 0.55; }
   }
-  .cell .icon { font-size: 20px; display: flex; align-items: center; justify-content: center; }
-  .cell .icon svg, .cell .icon img { display: block; max-width: 90%; max-height: 90%; object-fit: contain; }
+  .cell .icon { font-size: 40px; display: flex; align-items: center; justify-content: center; }
+  .cell .icon svg, .cell .icon img { display: block; max-width: 96%; max-height: 96%; object-fit: contain; }
   .tokens {
     position: absolute;
-    bottom: 3px;
+    bottom: 0;
+    left: 0;
+    right: 0;
     display: flex;
-    gap: 2px;
+    justify-content: center;
+    align-items: flex-end;
+    gap: 0;
+    pointer-events: none;
   }
   .token {
-    width: 13px; height: 13px;
-    border-radius: 50%;
-    border: 2px solid #fff;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+    height: 70px;
+    width: auto;
+    max-width: 46px;
+    object-fit: contain;
+    object-position: bottom;
+    filter: drop-shadow(0 2px 2px rgba(0,0,0,0.6));
+    margin: 0 -6px;
   }
 
   /* カメラ切り替えボタン */
@@ -305,11 +313,11 @@
 </head>
 <body>
 <div id="app">
-  <h1 id="title">伊能忠敬の浪漫歩行<span class="sub">ROMANTIC WALK OF INŌ TADATAKA</span></h1>
+  <h1 id="title">伊能忠敬の浪漫歩行<span class="sub">ROMANTIC WALK OF INO TADATAKA</span></h1>
   <div id="header"></div>
 
   <div id="controls">
-    <div id="message">ゲームを開始します。プレイヤー1の番です。</div>
+    <div id="message">ゲームを開始します。武士の番です。</div>
     <div id="dice-area">
       <div id="dice">?</div>
       <button id="roll-btn">サイコロを振る</button>
@@ -355,11 +363,12 @@ const WORLD_SIZE = CELL_SIZE * GRID;   // 盤面全体のピクセルサイズ (
 const VIEWPORT_SIZE = 300;             // 実際に画面に見えている窓のサイズ
 // WORLD_SIZE / VIEWPORT_SIZE = 2.5 → 背景画像が約2.5倍に拡大されて、その一部だけが見えている状態
 const PLAYER_COLORS = ['#ff6b6b', '#4dabf7'];
-const PLAYER_NAMES = ['プレイヤー1', 'プレイヤー2'];
+const PLAYER_AVATARS = ['player_01.png', 'player_02.png'];
+const PLAYER_NAMES = ['武士', '町娘'];
 
 /* 小判アイコン（ユーザー作成のオリジナル画像ファイルを参照） */
-const KOBAN_SVG = `<img src="koban.svg" alt="小判" style="width:20px;height:auto;display:block;">`;
-const FLYING_KOBAN_SVG = `<img src="flying_koban.svg" alt="小判（羽根つき）" style="width:24px;height:auto;display:block;">`;
+const KOBAN_SVG = `<img src="koban.svg" alt="小判" style="width:40px;height:auto;display:block;">`;
+const FLYING_KOBAN_SVG = `<img src="flying_koban.svg" alt="小判（羽根つき）" style="width:48px;height:auto;display:block;">`;
 
 
 /* 兵庫県内の史跡（案内マス用データ） */
@@ -460,7 +469,7 @@ function generateBoard() {
 /* ===== 状態 ===== */
 let board = generateBoard();
 let players = PLAYER_NAMES.map((name, i) => ({
-  name, color: PLAYER_COLORS[i], x: STARTPOS.x, y: STARTPOS.y, money: 1000,
+  name, color: PLAYER_COLORS[i], avatar: PLAYER_AVATARS[i], x: STARTPOS.x, y: STARTPOS.y, money: 1000,
 }));
 let currentPlayer = 0;
 let gameOver = false;
@@ -540,7 +549,7 @@ function renderHeader() {
     card.className = 'player-card' + (i === currentPlayer && !gameOver ? ' active' : '');
     card.innerHTML = `
       <div class="name"><span class="dot" style="background:${p.color}"></span>${p.name}</div>
-      <div class="money">¥${p.money.toLocaleString()}</div>
+      <div class="money">${p.money.toLocaleString()} 両</div>
     `;
     headerEl.appendChild(card);
   });
@@ -555,7 +564,7 @@ function renderBoard() {
       div.className = 'cell ' + cell.type;
       const tokensHtml = players
         .filter(p => p.x === x && p.y === y)
-        .map(p => `<div class="token" style="background:${p.color}"></div>`)
+        .map(p => `<img class="token" src="${p.avatar}" alt="${p.name}">`)
         .join('');
       div.innerHTML = `
         <span class="icon">${cell.icon}</span>
@@ -648,10 +657,10 @@ function landOnCell(player) {
 
   if (cell.type === 'event-money') {
     player.money += cell.amount;
-    msg += ` ¥${cell.amount}もらった！`;
+    msg += ` ${cell.amount} 両もらった！`;
   } else if (cell.type === 'event-loss') {
     player.money = Math.max(0, player.money - cell.amount);
-    msg += ` ¥${cell.amount}失った…`;
+    msg += ` ${cell.amount} 両失った…`;
   } else if (cell.type === 'event-warp') {
     const nx = clamp(player.x + (Math.floor(Math.random() * 7) - 3), 0, GRID - 1);
     const ny = clamp(player.y + (Math.floor(Math.random() * 7) - 3), 0, GRID - 1);
@@ -710,7 +719,7 @@ function endGame() {
 function restartGame() {
   board = generateBoard();
   players = PLAYER_NAMES.map((name, i) => ({
-    name, color: PLAYER_COLORS[i], x: STARTPOS.x, y: STARTPOS.y, money: 1000,
+    name, color: PLAYER_COLORS[i], avatar: PLAYER_AVATARS[i], x: STARTPOS.x, y: STARTPOS.y, money: 1000,
   }));
   currentPlayer = 0;
   gameOver = false;
@@ -719,7 +728,7 @@ function restartGame() {
   diceEl.textContent = '?';
   rollBtn.disabled = false;
   restartBtn.style.display = 'none';
-  messageEl.textContent = `新しいスタート(${STARTPOS.x}, ${STARTPOS.y})とゴール(${GOALPOS.x}, ${GOALPOS.y})でゲームを開始します。プレイヤー1の番です。`;
+  messageEl.textContent = `新しいスタート(${STARTPOS.x}, ${STARTPOS.y})とゴール(${GOALPOS.x}, ${GOALPOS.y})でゲームを開始します。武士の番です。`;
   renderAll();
   updateDpad();
   centerCameraOn(players[currentPlayer].x, players[currentPlayer].y);
@@ -746,7 +755,7 @@ btnFollow.addEventListener('click', showCurrentLocation);
    ========================================================= */
 
 /* ===== 初期描画 ===== */
-messageEl.textContent = `スタート(${STARTPOS.x}, ${STARTPOS.y})からゴール(${GOALPOS.x}, ${GOALPOS.y})を目指そう。プレイヤー1の番です。`;
+messageEl.textContent = `スタート(${STARTPOS.x}, ${STARTPOS.y})からゴール(${GOALPOS.x}, ${GOALPOS.y})を目指そう。武士の番です。`;
 renderAll();
 updateDpad();
 centerCameraOn(players[currentPlayer].x, players[currentPlayer].y);

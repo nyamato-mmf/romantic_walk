@@ -77,6 +77,16 @@
   .player-card .name { font-weight: bold; display: flex; align-items: center; gap: 4px; }
   .player-card .money { font-size: 15px; font-weight: bold; margin-top: 2px; }
   .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .cpu-badge {
+    font-size: 9px;
+    font-weight: bold;
+    color: #223a2e;
+    background: #ffd54f;
+    border-radius: 6px;
+    padding: 1px 6px;
+    letter-spacing: 0.05em;
+    vertical-align: middle;
+  }
 
   /* 操作エリア（サイコロ＋方向パッド） */
   #controls {
@@ -600,10 +610,13 @@ function generateBoard() {
   return board;
 }
 
+const CPU_PLAYER_INDEX = 1; // プレイヤー2（町娘）をCPU（自動操作）にする
+
 /* ===== 状態 ===== */
 let board = generateBoard();
 let players = PLAYER_NAMES.map((name, i) => ({
   name, color: PLAYER_COLORS[i], idx: i, facing: 'down', x: STARTPOS.x, y: STARTPOS.y, money: 1000, diceBonus: 0,
+  isCPU: i === CPU_PLAYER_INDEX,
 }));
 let currentPlayer = 0;
 let gameOver = false;
@@ -715,7 +728,7 @@ function renderHeader() {
     const card = document.createElement('div');
     card.className = 'player-card' + (i === currentPlayer && !gameOver ? ' active' : '');
     card.innerHTML = `
-      <div class="name"><span class="dot" style="background:${p.color}"></span>${p.name}</div>
+      <div class="name"><span class="dot" style="background:${p.color}"></span>${p.name}${p.isCPU ? ' <span class="cpu-badge">CPU</span>' : ''}</div>
       <div class="money">${p.money.toLocaleString()} 両</div>
     `;
     headerEl.appendChild(card);
@@ -752,7 +765,7 @@ function renderAll() {
 /* ===== 方向パッドの有効/無効切り替え ===== */
 function updateDpad() {
   const p = players[currentPlayer];
-  const active = remainingSteps > 0 && !gameOver && !rolling;
+  const active = remainingSteps > 0 && !gameOver && !rolling && !p.isCPU;
   btnUp.disabled = !active || p.y === 0;
   btnDown.disabled = !active || p.y === GRID - 1;
   btnLeft.disabled = !active || p.x === 0;
@@ -761,7 +774,7 @@ function updateDpad() {
 }
 
 /* ===== サイコロ ===== */
-function rollDice() {
+function rollDice(onComplete) {
   if (rolling || gameOver || remainingSteps > 0) return;
   rolling = true;
   rollBtn.disabled = true;
@@ -788,6 +801,7 @@ function rollDice() {
         ? `${player.name}：サイコロ${base}＋元気ボーナス${bonus}＝残り${result}歩。上下左右に自由に進もう！`
         : `${player.name}：残り${result}歩。上下左右に自由に進もう！`;
       updateDpad();
+      if (onComplete) onComplete();
     }
   }, 80);
 }
@@ -826,6 +840,80 @@ function tryMove(dir) {
 }
 
 function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+
+/* ===== CPU（自動操作）ロジック =====
+   基本方針：「ゴールに向かって進みつつ、たまにランダム性を混ぜる」
+   - 70%の確率でゴールへの距離が縮まる方向を選ぶ
+   - 30%の確率で（範囲内なら）完全ランダムな方向を選ぶ */
+function chooseCpuDirection(player) {
+  const dirs = ['up', 'down', 'left', 'right'];
+  const valid = dirs.filter(d => {
+    let { x, y } = player;
+    if (d === 'up') y -= 1;
+    else if (d === 'down') y += 1;
+    else if (d === 'left') x -= 1;
+    else if (d === 'right') x += 1;
+    return x >= 0 && x < GRID && y >= 0 && y < GRID;
+  });
+  if (valid.length === 0) return 'up'; // 実際には起こらない想定の保険
+
+  if (Math.random() < 0.3) {
+    return valid[Math.floor(Math.random() * valid.length)];
+  }
+
+  let best = valid[0];
+  let bestDist = Infinity;
+  valid.forEach(d => {
+    let { x, y } = player;
+    if (d === 'up') y -= 1;
+    else if (d === 'down') y += 1;
+    else if (d === 'left') x -= 1;
+    else if (d === 'right') x += 1;
+    const dist = Math.abs(x - GOALPOS.x) + Math.abs(y - GOALPOS.y);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = d;
+    }
+  });
+  return best;
+}
+
+function cpuStepLoop(attempt) {
+  attempt = attempt || 0;
+  if (gameOver || remainingSteps <= 0) return;
+  if (attempt > 20) return; // 万一動けなくなった場合の安全装置
+
+  const player = players[currentPlayer];
+  const beforeX = player.x, beforeY = player.y, beforeSteps = remainingSteps;
+  const dir = chooseCpuDirection(player);
+  tryMove(dir);
+
+  // ゴール手前で歩数が余る等の理由で動けなかった場合は、少し待って別方向を再選択
+  if (player.x === beforeX && player.y === beforeY && remainingSteps === beforeSteps) {
+    setTimeout(() => cpuStepLoop(attempt + 1), 300);
+    return;
+  }
+
+  if (!gameOver && remainingSteps > 0) {
+    setTimeout(() => cpuStepLoop(0), 500);
+  }
+}
+
+function cpuPlayTurn() {
+  if (gameOver) return;
+  rollDice(() => {
+    setTimeout(() => cpuStepLoop(0), 400);
+  });
+}
+
+function triggerCPUIfNeeded() {
+  if (gameOver) return;
+  const player = players[currentPlayer];
+  if (player.isCPU) {
+    rollBtn.disabled = true;
+    setTimeout(cpuPlayTurn, 900);
+  }
+}
 
 function landOnCell(player) {
   const cell = board[player.y][player.x];
@@ -871,6 +959,7 @@ function landOnCell(player) {
       rollBtn.disabled = false;
       nextTurn();
     });
+    if (player.isCPU) setTimeout(() => infoCloseBtn.click(), 1200);
     return;
   }
 
@@ -884,6 +973,7 @@ function landOnCell(player) {
         nextTurn();
       }
     );
+    if (player.isCPU) setTimeout(() => infoCloseBtn.click(), 1200);
     return;
   }
 
@@ -897,6 +987,7 @@ function landOnCell(player) {
         nextTurn();
       }
     );
+    if (player.isCPU) setTimeout(() => infoCloseBtn.click(), 1200);
     return;
   }
 
@@ -914,6 +1005,7 @@ function nextTurn() {
     const p = players[currentPlayer];
     centerCameraOn(p.x, p.y);
   }, 400);
+  triggerCPUIfNeeded();
 }
 
 function endGame(arrivedPlayer) {
@@ -935,6 +1027,7 @@ function restartGame() {
   board = generateBoard();
   players = PLAYER_NAMES.map((name, i) => ({
     name, color: PLAYER_COLORS[i], idx: i, facing: 'down', x: STARTPOS.x, y: STARTPOS.y, money: 1000, diceBonus: 0,
+    isCPU: i === CPU_PLAYER_INDEX,
   }));
   currentPlayer = 0;
   gameOver = false;
@@ -948,10 +1041,11 @@ function restartGame() {
   renderAll();
   updateDpad();
   centerCameraOn(players[currentPlayer].x, players[currentPlayer].y);
+  triggerCPUIfNeeded();
 }
 
 /* ===== イベント登録 ===== */
-rollBtn.addEventListener('click', rollDice);
+rollBtn.addEventListener('click', () => rollDice());
 restartBtn.addEventListener('click', restartGame);
 btnUp.addEventListener('click', () => tryMove('up'));
 btnDown.addEventListener('click', () => tryMove('down'));

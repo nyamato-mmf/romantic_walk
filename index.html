@@ -207,7 +207,8 @@
   }
   .cell.event-money { background: rgba(74, 108, 58, 0.3); }
   .cell.event-loss { background: rgba(108, 58, 58, 0.3); }
-  .cell.event-warp { background: rgba(58, 74, 108, 0.3); }
+  .cell.event-teahouse { background: rgba(160, 110, 40, 0.3); }
+  .cell.event-inn { background: rgba(90, 60, 120, 0.3); }
   .cell.info { background: rgba(138, 109, 59, 0.3); }
   .cell.start { background: rgba(184, 134, 11, 0.2); }
   .cell.goal { background: rgba(184, 48, 92, 0.55); }
@@ -309,6 +310,78 @@
     color: #ead9ad;
     width: 100%;
   }
+
+  /* ゲーム結果ポップアップ */
+  #result-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 16, 12, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    z-index: 60;
+  }
+  #result-overlay.hidden { display: none; }
+  #result-card {
+    background: #ead9ad;
+    color: #3a2c18;
+    border: 3px double #6b4f2a;
+    border-radius: 8px;
+    max-width: 360px;
+    width: 100%;
+    padding: 22px 20px;
+    text-align: center;
+  }
+  #result-card .badge {
+    display: inline-block;
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    color: #8a6d3b;
+    border: 1px solid #8a6d3b;
+    border-radius: 12px;
+    padding: 2px 10px;
+    margin-bottom: 10px;
+  }
+  #result-card h3 {
+    font-family: "Yuji Syuku", serif;
+    font-size: 20px;
+    letter-spacing: 0.06em;
+    margin: 0 0 16px;
+    line-height: 1.5;
+  }
+  #result-scores {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .result-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 14px;
+    border-radius: 8px;
+    background: rgba(107, 79, 42, 0.12);
+    font-size: 14px;
+    font-weight: bold;
+  }
+  .result-row.winner {
+    background: #ffd54f;
+    box-shadow: 0 0 0 2px #b8860b inset;
+  }
+  #result-champion {
+    font-family: "Yuji Syuku", serif;
+    font-size: 22px;
+    letter-spacing: 0.06em;
+    margin: 0 0 18px;
+    color: #8a1f3a;
+  }
+  #result-card button {
+    background: #6b4f2a;
+    color: #ead9ad;
+    width: 100%;
+  }
 </style>
 </head>
 <body>
@@ -345,10 +418,20 @@
 
 <div id="info-overlay" class="hidden">
   <div id="info-card">
-    <span class="badge">兵庫県 史跡案内</span>
+    <span id="info-badge" class="badge">兵庫県 史跡案内</span>
     <h3 id="info-title"></h3>
     <p id="info-desc"></p>
     <button id="info-close">とじる</button>
+  </div>
+</div>
+
+<div id="result-overlay" class="hidden">
+  <div id="result-card">
+    <span class="badge">ゲーム終了</span>
+    <h3 id="result-headline"></h3>
+    <div id="result-scores"></div>
+    <p id="result-champion"></p>
+    <button id="result-close">とじる</button>
   </div>
 </div>
 
@@ -435,8 +518,10 @@ function generateBoard() {
         } else if (r < 0.32) {
           const amount = (Math.floor(Math.random() * 3) + 1) * 100;
           row.push({ type: 'event-loss', label: `-${amount}`, icon: FLYING_KOBAN_SVG, amount });
+        } else if (r < 0.36) {
+          row.push({ type: 'event-teahouse', label: '茶屋', icon: '🍡' });
         } else if (r < 0.40) {
-          row.push({ type: 'event-warp', label: 'ワープ', icon: '🌀' });
+          row.push({ type: 'event-inn', label: '旅籠', icon: '🏮' });
         } else {
           row.push({ type: 'normal', label: '', icon: '' });
         }
@@ -476,7 +561,7 @@ function generateBoard() {
 /* ===== 状態 ===== */
 let board = generateBoard();
 let players = PLAYER_NAMES.map((name, i) => ({
-  name, color: PLAYER_COLORS[i], idx: i, facing: 'down', x: STARTPOS.x, y: STARTPOS.y, money: 1000,
+  name, color: PLAYER_COLORS[i], idx: i, facing: 'down', x: STARTPOS.x, y: STARTPOS.y, money: 1000, diceBonus: 0,
 }));
 let currentPlayer = 0;
 let gameOver = false;
@@ -496,9 +581,15 @@ const btnDown = document.getElementById('btn-down');
 const btnLeft = document.getElementById('btn-left');
 const btnRight = document.getElementById('btn-right');
 const infoOverlay = document.getElementById('info-overlay');
+const infoBadgeEl = document.getElementById('info-badge');
 const infoTitleEl = document.getElementById('info-title');
 const infoDescEl = document.getElementById('info-desc');
 const infoCloseBtn = document.getElementById('info-close');
+const resultOverlay = document.getElementById('result-overlay');
+const resultHeadlineEl = document.getElementById('result-headline');
+const resultScoresEl = document.getElementById('result-scores');
+const resultChampionEl = document.getElementById('result-champion');
+const resultCloseBtn = document.getElementById('result-close');
 const btnOverview = document.getElementById('btn-overview');
 const btnFollow = document.getElementById('btn-follow');
 
@@ -534,10 +625,11 @@ function showCurrentLocation() {
   centerCameraOn(p.x, p.y);
 }
 
-/* ===== 史跡案内カード ===== */
-function showInfoCard(site, onClose) {
-  infoTitleEl.textContent = site.title;
-  infoDescEl.textContent = site.desc;
+/* ===== 汎用ポップアップ（史跡案内／茶屋／旅籠で共用） ===== */
+function showEventPopup(badge, title, desc, onClose) {
+  infoBadgeEl.textContent = badge;
+  infoTitleEl.textContent = title;
+  infoDescEl.textContent = desc;
   infoOverlay.classList.remove('hidden');
 
   const handler = () => {
@@ -547,6 +639,32 @@ function showInfoCard(site, onClose) {
   };
   infoCloseBtn.addEventListener('click', handler);
 }
+
+function showInfoCard(site, onClose) {
+  showEventPopup('兵庫県 史跡案内', site.title, site.desc, onClose);
+}
+
+/* ===== ゲーム結果ポップアップ ===== */
+function showResultPopup(arrivedPlayer) {
+  resultHeadlineEl.textContent = `${arrivedPlayer.name}が先にゴールに到着！（+3,000両ボーナス）`;
+
+  const sorted = [...players].sort((a, b) => b.money - a.money);
+  const isTie = sorted[0].money === sorted[1].money;
+
+  resultScoresEl.innerHTML = sorted.map((p, i) => `
+    <div class="result-row ${!isTie && i === 0 ? 'winner' : ''}">
+      <span>${!isTie && i === 0 ? '👑 ' : ''}${p.name}</span>
+      <span>${p.money.toLocaleString()} 両</span>
+    </div>
+  `).join('');
+
+  resultChampionEl.textContent = isTie
+    ? '所持金が同額のため引き分けです！'
+    : `${sorted[0].name}の勝利です！`;
+
+  resultOverlay.classList.remove('hidden');
+}
+resultCloseBtn.addEventListener('click', () => resultOverlay.classList.add('hidden'));
 
 /* ===== 描画 ===== */
 function renderHeader() {
@@ -613,12 +731,18 @@ function rollDice() {
     ticks++;
     if (ticks >= maxTicks) {
       clearInterval(interval);
-      const result = Math.floor(Math.random() * 6) + 1;
+      const player = players[currentPlayer];
+      const base = Math.floor(Math.random() * 6) + 1;
+      const bonus = player.diceBonus || 0;
+      const result = base + bonus;
+      player.diceBonus = 0; // ボーナスは1回使ったらリセット
       diceEl.textContent = String(result);
       diceEl.classList.remove('rolling');
       rolling = false;
       remainingSteps = result;
-      messageEl.textContent = `${players[currentPlayer].name}：残り${result}歩。上下左右に自由に進もう！`;
+      messageEl.textContent = bonus > 0
+        ? `${player.name}：サイコロ${base}＋元気ボーナス${bonus}＝残り${result}歩。上下左右に自由に進もう！`
+        : `${player.name}：残り${result}歩。上下左右に自由に進もう！`;
       updateDpad();
     }
   }, 80);
@@ -669,12 +793,14 @@ function landOnCell(player) {
   } else if (cell.type === 'event-loss') {
     player.money = Math.max(0, player.money - cell.amount);
     msg += ` ${cell.amount} 両失った…`;
-  } else if (cell.type === 'event-warp') {
-    const nx = clamp(player.x + (Math.floor(Math.random() * 7) - 3), 0, GRID - 1);
-    const ny = clamp(player.y + (Math.floor(Math.random() * 7) - 3), 0, GRID - 1);
-    player.x = nx;
-    player.y = ny;
-    msg += ` ワープして (${nx}, ${ny}) へ！`;
+  } else if (cell.type === 'event-teahouse') {
+    player.money = Math.max(0, player.money - 100);
+    player.diceBonus = (player.diceBonus || 0) + 1;
+    msg += ' 茶屋で団子を食べた！';
+  } else if (cell.type === 'event-inn') {
+    player.money = Math.max(0, player.money - 500);
+    player.diceBonus = (player.diceBonus || 0) + 5;
+    msg += ' 旅籠に泊まった！';
   } else if (cell.type === 'goal') {
     msg += ' ゴール！';
   } else if (cell.type === 'info') {
@@ -689,7 +815,7 @@ function landOnCell(player) {
   messageEl.textContent = msg;
 
   if (player.x === GOALPOS.x && player.y === GOALPOS.y) {
-    endGame();
+    endGame(player);
     return;
   }
 
@@ -698,6 +824,32 @@ function landOnCell(player) {
       rollBtn.disabled = false;
       nextTurn();
     });
+    return;
+  }
+
+  if (cell.type === 'event-teahouse') {
+    showEventPopup(
+      '茶屋',
+      '団子を一服',
+      '団子を100両で食べて、元気が出たので次回のサイコロの目が1つプラスされる。',
+      () => {
+        rollBtn.disabled = false;
+        nextTurn();
+      }
+    );
+    return;
+  }
+
+  if (cell.type === 'event-inn') {
+    showEventPopup(
+      '旅籠',
+      '一晩の宿',
+      '500両で泊まり、元気が出たので次回のサイコロの目が5つプラスされる。',
+      () => {
+        rollBtn.disabled = false;
+        nextTurn();
+      }
+    );
     return;
   }
 
@@ -717,20 +869,25 @@ function nextTurn() {
   }, 400);
 }
 
-function endGame() {
+function endGame(arrivedPlayer) {
   gameOver = true;
   rollBtn.disabled = true;
   restartBtn.style.display = 'inline-block';
-  const winner = players[currentPlayer];
-  messageEl.textContent += ` ${winner.name}のゴール！ゲーム終了🎉`;
+
+  // 先にゴールしたプレイヤーに3,000両ボーナス
+  arrivedPlayer.money += 3000;
+
   renderHeader();
   updateDpad();
+  messageEl.textContent += ` ${arrivedPlayer.name}のゴール！ゲーム終了🎉`;
+
+  showResultPopup(arrivedPlayer);
 }
 
 function restartGame() {
   board = generateBoard();
   players = PLAYER_NAMES.map((name, i) => ({
-    name, color: PLAYER_COLORS[i], idx: i, facing: 'down', x: STARTPOS.x, y: STARTPOS.y, money: 1000,
+    name, color: PLAYER_COLORS[i], idx: i, facing: 'down', x: STARTPOS.x, y: STARTPOS.y, money: 1000, diceBonus: 0,
   }));
   currentPlayer = 0;
   gameOver = false;
@@ -739,6 +896,7 @@ function restartGame() {
   diceEl.textContent = '?';
   rollBtn.disabled = false;
   restartBtn.style.display = 'none';
+  resultOverlay.classList.add('hidden');
   messageEl.textContent = `新しいスタート(${STARTPOS.x}, ${STARTPOS.y})とゴール(${GOALPOS.x}, ${GOALPOS.y})でゲームを開始します。武士の番です。`;
   renderAll();
   updateDpad();

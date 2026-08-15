@@ -8,3 +8,6 @@ _xlsx/*
 # 以下の拡張子を持つすべてのファイル
 *.xlsx
 *.pptx
+
+# 以下のファイルを無視
+romantic-walk-qr-code.png

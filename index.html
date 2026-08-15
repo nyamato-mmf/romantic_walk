@@ -39,6 +39,14 @@
       1px 1px 2px rgba(0,0,0,0.4);
     margin: 4px 0 2px;
   }
+  #title .subtitle-ja {
+    display: block;
+    font-family: "Yuji Syuku", serif;
+    font-size: 15px;
+    letter-spacing: 0.2em;
+    color: #cbb98a;
+    margin-top: 4px;
+  }
   #title .sub {
     display: block;
     font-family: "Yuji Syuku", serif;
@@ -386,7 +394,7 @@
 </head>
 <body>
 <div id="app">
-  <h1 id="title">伊能忠敬の浪漫歩行<span class="sub">ROMANTIC WALK OF INO TADATAKA</span></h1>
+  <h1 id="title">伊能忠敬の浪漫歩行<span class="subtitle-ja">播磨・摂津・丹波の旅</span><span class="sub">ROMANTIC WALK OF INO TADATAKA</span></h1>
   <div id="header"></div>
 
   <div id="controls">
@@ -573,12 +581,12 @@ function generateBoard() {
   for (let i = 0; i < COUNT_PER_TYPE && cursor < candidates.length; i++, cursor++) {
     const { x, y } = candidates[cursor];
     const amount = (Math.floor(Math.random() * 4) + 1) * 100;
-    board[y][x] = { type: 'event-money', label: `+${amount}`, icon: KOBAN_SVG, amount };
+    board[y][x] = { type: 'event-money', label: `+${amount}`, icon: KOBAN_SVG, amount, revealed: false };
   }
   for (let i = 0; i < COUNT_PER_TYPE && cursor < candidates.length; i++, cursor++) {
     const { x, y } = candidates[cursor];
     const amount = (Math.floor(Math.random() * 3) + 1) * 100;
-    board[y][x] = { type: 'event-loss', label: `-${amount}`, icon: FLYING_KOBAN_SVG, amount };
+    board[y][x] = { type: 'event-loss', label: `-${amount}`, icon: FLYING_KOBAN_SVG, amount, revealed: false };
   }
   for (let i = 0; i < COUNT_PER_TYPE && cursor < candidates.length; i++, cursor++) {
     const { x, y } = candidates[cursor];
@@ -719,14 +727,16 @@ function renderBoard() {
   for (let y = 0; y < GRID; y++) {
     for (let x = 0; x < GRID; x++) {
       const cell = board[y][x];
+      // 小判・逆さ小判マスは、誰かが実際に止まって発見するまでは通常マスと同じ見た目で隠しておく
+      const isHiddenTreasure = (cell.type === 'event-money' || cell.type === 'event-loss') && !cell.revealed;
       const div = document.createElement('div');
-      div.className = 'cell ' + cell.type;
+      div.className = 'cell ' + (isHiddenTreasure ? 'normal' : cell.type);
       const tokensHtml = players
         .filter(p => p.x === x && p.y === y)
         .map(p => `<img class="token" src="${getPlayerImage(p)}" alt="${p.name}">`)
         .join('');
       div.innerHTML = `
-        <span class="icon">${cell.icon}</span>
+        <span class="icon">${isHiddenTreasure ? '' : cell.icon}</span>
         <div class="tokens">${tokensHtml}</div>
       `;
       boardEl.appendChild(div);
@@ -822,9 +832,11 @@ function landOnCell(player) {
   let msg = `${player.name}は (${player.x}, ${player.y}) 「${cell.label || 'なにもなし'}」に止まった。`;
 
   if (cell.type === 'event-money') {
+    cell.revealed = true;
     player.money += cell.amount;
     msg += ` ${cell.amount} 両もらった！`;
   } else if (cell.type === 'event-loss') {
+    cell.revealed = true;
     player.money = Math.max(0, player.money - cell.amount);
     msg += ` ${cell.amount} 両失った…`;
   } else if (cell.type === 'event-teahouse') {

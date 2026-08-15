@@ -199,12 +199,12 @@
     position: absolute;
     top: 0;
     left: 0;
-    width: 750px;
-    height: 750px;
+    width: 1500px;
+    height: 1500px;
     transform-origin: 0 0;
     display: grid;
-    grid-template-columns: repeat(10, 75px);
-    grid-template-rows: repeat(10, 75px);
+    grid-template-columns: repeat(20, 75px);
+    grid-template-rows: repeat(20, 75px);
     background-image: url('pixel_art_output.png');
     background-size: cover;
     background-position: center;
@@ -400,6 +400,81 @@
     color: #ead9ad;
     width: 100%;
   }
+
+  /* キャラクター選択画面 */
+  #character-select-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 16, 12, 0.92);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    z-index: 70;
+  }
+  #character-select-overlay.hidden { display: none; }
+  #character-select-card {
+    background: #ead9ad;
+    color: #3a2c18;
+    border: 3px double #6b4f2a;
+    border-radius: 8px;
+    max-width: 380px;
+    width: 100%;
+    padding: 26px 20px;
+    text-align: center;
+  }
+  #character-select-card .badge {
+    display: inline-block;
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    color: #8a6d3b;
+    border: 1px solid #8a6d3b;
+    border-radius: 12px;
+    padding: 2px 10px;
+    margin-bottom: 10px;
+  }
+  #character-select-card h3 {
+    font-family: "Yuji Syuku", serif;
+    font-size: 20px;
+    letter-spacing: 0.06em;
+    margin: 0 0 20px;
+    line-height: 1.5;
+  }
+  .character-options {
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+  }
+  .character-option {
+    flex: 1;
+    max-width: 150px;
+    background: rgba(107, 79, 42, 0.1);
+    border: 2px solid transparent;
+    border-radius: 10px;
+    padding: 12px 8px 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+  }
+  .character-option:hover,
+  .character-option:active {
+    border-color: #b8860b;
+    background: rgba(184, 134, 11, 0.15);
+  }
+  .character-option img {
+    height: 120px;
+    width: auto;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    filter: drop-shadow(0 2px 3px rgba(0,0,0,0.3));
+  }
+  .character-option span {
+    font-family: "Yuji Syuku", serif;
+    font-size: 16px;
+    letter-spacing: 0.08em;
+  }
 </style>
 </head>
 <body>
@@ -434,6 +509,23 @@
   </div>
 </div>
 
+<div id="character-select-overlay">
+  <div id="character-select-card">
+    <span class="badge">キャラクター選択</span>
+    <h3>あなたが操作するキャラクターを<br>選んでください</h3>
+    <div class="character-options">
+      <button class="character-option" data-idx="0">
+        <img src="player_01_D.png" alt="武士">
+        <span>武士</span>
+      </button>
+      <button class="character-option" data-idx="1">
+        <img src="player_02_D.png" alt="町娘">
+        <span>町娘</span>
+      </button>
+    </div>
+  </div>
+</div>
+
 <div id="info-overlay" class="hidden">
   <div id="info-card">
     <span id="info-badge" class="badge">兵庫県 史跡案内</span>
@@ -455,14 +547,16 @@
 
 <script>
 /* =========================================================
-   盤面設定：10 x 10 = 100マス、座標 (x, y) はどちらも 0〜9
+   盤面設定：20 x 20 = 400マス、座標 (x, y) はどちらも 0〜19
    カメラは常に「現在の手番のキャラクター」を中心に映す
    ========================================================= */
-const GRID = 10;
+const GRID = 20;
 const CELL_SIZE = 75;                  // 1マスのピクセルサイズ
-const WORLD_SIZE = CELL_SIZE * GRID;   // 盤面全体のピクセルサイズ (750px)
-const VIEWPORT_SIZE = 300;             // 実際に画面に見えている窓のサイズ
-// WORLD_SIZE / VIEWPORT_SIZE = 2.5 → 背景画像が約2.5倍に拡大されて、その一部だけが見えている状態
+const WORLD_SIZE = CELL_SIZE * GRID;   // 盤面全体のピクセルサイズ (1500px)
+const VIEWPORT_WIDTH = 440;            // 画面に見えている窓の幅
+const VIEWPORT_HEIGHT = 300;           // 画面に見えている窓の高さ
+// 盤面(1500px四方)は窓(440×300px)より大きいので、常にキャラクターを中心にズームして
+// 縦横どちらの方向にもカメラがパンする（以前の見え方と同じ挙動）
 const PLAYER_COLORS = ['#ff6b6b', '#4dabf7'];
 /* 方向ごとの静止画（D=下/停止時, U=上, L=左, R=右） */
 const PLAYER_DIRECTION_IMAGES = [
@@ -501,9 +595,13 @@ function isInfoSpot(x, y) {
 
 /* 海エリア（MASK）：スタート・ゴール・茶屋・旅籠・小判・逆さ小判を配置しない */
 const MASK = [
-  {x:1, y:7}, {x:2, y:7}, {x:3, y:7}, {x:4, y:7}, {x:5, y:7}, {x:6, y:7}, {x:7, y:7},
-  {x:0, y:8}, {x:1, y:8}, {x:2, y:8}, {x:3, y:8}, {x:4, y:8}, {x:5, y:8}, {x:6, y:8}, {x:7, y:8}, {x:8, y:8},
-  {x:0, y:9}, {x:1, y:9}, {x:2, y:9}, {x:3, y:9}, {x:4, y:9}, {x:5, y:9}, {x:6, y:9}, {x:7, y:9},
+  // 20×20盤面向けに再配置（元の10×10版MASKを2倍解像度にスケーリング）
+  {x:2, y:14}, {x:3, y:14}, {x:4, y:14}, {x:5, y:14}, {x:6, y:14}, {x:7, y:14}, {x:8, y:14}, {x:9, y:14}, {x:10, y:14}, {x:11, y:14}, {x:12, y:14}, {x:13, y:14}, {x:14, y:14}, {x:15, y:14},
+  {x:2, y:15}, {x:3, y:15}, {x:4, y:15}, {x:5, y:15}, {x:6, y:15}, {x:7, y:15}, {x:8, y:15}, {x:9, y:15}, {x:10, y:15}, {x:11, y:15}, {x:12, y:15}, {x:13, y:15}, {x:14, y:15}, {x:15, y:15},
+  {x:0, y:16}, {x:1, y:16}, {x:2, y:16}, {x:3, y:16}, {x:4, y:16}, {x:5, y:16}, {x:6, y:16}, {x:7, y:16}, {x:8, y:16}, {x:9, y:16}, {x:10, y:16}, {x:11, y:16}, {x:12, y:16}, {x:13, y:16}, {x:14, y:16}, {x:15, y:16}, {x:16, y:16}, {x:17, y:16},
+  {x:0, y:17}, {x:1, y:17}, {x:2, y:17}, {x:3, y:17}, {x:4, y:17}, {x:5, y:17}, {x:6, y:17}, {x:7, y:17}, {x:8, y:17}, {x:9, y:17}, {x:10, y:17}, {x:11, y:17}, {x:12, y:17}, {x:13, y:17}, {x:14, y:17}, {x:15, y:17}, {x:16, y:17}, {x:17, y:17},
+  {x:0, y:18}, {x:1, y:18}, {x:2, y:18}, {x:3, y:18}, {x:4, y:18}, {x:5, y:18}, {x:6, y:18}, {x:7, y:18}, {x:8, y:18}, {x:9, y:18}, {x:10, y:18}, {x:11, y:18}, {x:12, y:18}, {x:13, y:18}, {x:14, y:18}, {x:15, y:18},
+  {x:0, y:19}, {x:1, y:19}, {x:2, y:19}, {x:3, y:19}, {x:4, y:19}, {x:5, y:19}, {x:6, y:19}, {x:7, y:19}, {x:8, y:19}, {x:9, y:19}, {x:10, y:19}, {x:11, y:19}, {x:12, y:19}, {x:13, y:19}, {x:14, y:19}, {x:15, y:19},
 ];
 function isMasked(x, y) {
   return MASK.some(m => m.x === x && m.y === y);
@@ -534,7 +632,7 @@ function pickStartAndGoal() {
   do {
     goal = randomPos();
     tries++;
-  } while ((isInfoSpot(goal.x, goal.y) || isMasked(goal.x, goal.y) || manhattan(start, goal) < 8) && tries < 500);
+  } while ((isInfoSpot(goal.x, goal.y) || isMasked(goal.x, goal.y) || manhattan(start, goal) < 20) && tries < 500);
 
   return { start, goal };
 }
@@ -610,7 +708,7 @@ function generateBoard() {
   return board;
 }
 
-const CPU_PLAYER_INDEX = 1; // プレイヤー2（町娘）をCPU（自動操作）にする
+let CPU_PLAYER_INDEX = 1; // どちらをCPUにするかは、最初のキャラクター選択で決まる（デフォルトは町娘）
 
 /* ===== 状態 ===== */
 let board = generateBoard();
@@ -658,11 +756,14 @@ function centerCameraOn(x, y) {
 
   const cellCenterX = (x + 0.5) * CELL_SIZE;
   const cellCenterY = (y + 0.5) * CELL_SIZE;
-  let tx = VIEWPORT_SIZE / 2 - cellCenterX;
-  let ty = VIEWPORT_SIZE / 2 - cellCenterY;
-  const minT = VIEWPORT_SIZE - WORLD_SIZE; // 端でこれ以上は動かさない
-  tx = Math.max(minT, Math.min(0, tx));
-  ty = Math.max(minT, Math.min(0, ty));
+  let tx = VIEWPORT_WIDTH / 2 - cellCenterX;
+  let ty = VIEWPORT_HEIGHT / 2 - cellCenterY;
+  const minTx = Math.min(0, VIEWPORT_WIDTH - WORLD_SIZE);  // 端でこれ以上は動かさない
+  const minTy = Math.min(0, VIEWPORT_HEIGHT - WORLD_SIZE);
+  const maxTx = Math.max(0, VIEWPORT_WIDTH - WORLD_SIZE);  // 盤面が窓より小さい方向は中央寄せ
+  const maxTy = Math.max(0, VIEWPORT_HEIGHT - WORLD_SIZE);
+  tx = Math.max(minTx, Math.min(maxTx, tx));
+  ty = Math.max(minTy, Math.min(maxTy, ty));
   boardEl.style.transform = `translate(${tx}px, ${ty}px) scale(1)`;
 }
 
@@ -671,8 +772,12 @@ function showOverview() {
   btnOverview.classList.add('active-mode');
   btnFollow.classList.remove('active-mode');
 
-  const s = VIEWPORT_SIZE / WORLD_SIZE;
-  boardEl.style.transform = `translate(0px, 0px) scale(${s})`;
+  // 盤面全体が窓にぴったり収まる縮尺（縦横どちらも欠けないよう小さい方に合わせる）
+  const s = Math.min(VIEWPORT_WIDTH / WORLD_SIZE, VIEWPORT_HEIGHT / WORLD_SIZE);
+  const scaledSize = WORLD_SIZE * s;
+  const offsetX = (VIEWPORT_WIDTH - scaledSize) / 2;
+  const offsetY = (VIEWPORT_HEIGHT - scaledSize) / 2;
+  boardEl.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${s})`;
 }
 
 function showCurrentLocation() {
@@ -1054,12 +1159,27 @@ btnRight.addEventListener('click', () => tryMove('right'));
 btnOverview.addEventListener('click', showOverview);
 btnFollow.addEventListener('click', showCurrentLocation);
 
+/* ===== キャラクター選択 ===== */
+const characterSelectOverlay = document.getElementById('character-select-overlay');
+document.querySelectorAll('.character-option').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const chosenIdx = Number(btn.dataset.idx);
+    CPU_PLAYER_INDEX = chosenIdx === 0 ? 1 : 0;
+    players.forEach((p, i) => {
+      p.isCPU = (i === CPU_PLAYER_INDEX);
+    });
+    renderHeader();
+    characterSelectOverlay.classList.add('hidden');
+    triggerCPUIfNeeded();
+  });
+});
+
 /* =========================================================
    伊能図ふうpixelアート（pixel_art_output.png）は
    #board の background-image として設定し、
-   #board-viewport（300px四方）という小さな窓から
-   750px四方の盤面の一部だけが見える形にしている
-   （WORLD_SIZE / VIEWPORT_SIZE = 2.5 → 背景が約2.5倍に拡大された状態）
+   #board-viewport（440×300px）という窓から盤面を映している。
+   マスを半分サイズ(37.5px)にしたことで盤面全体は375×375pxとなり、
+   横方向は窓より小さいため常に全体が見え、縦方向のみカメラが追従してパンする。
    「全体」ボタンで scale を縮小して盤面全体を、
    「現在地」ボタンで現在の手番のキャラクターにカメラを戻す
    ========================================================= */

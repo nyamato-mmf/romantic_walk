@@ -460,7 +460,6 @@ const PLAYER_NAMES = ['武士', '町娘'];
 const KOBAN_SVG = `<img src="koban.svg" alt="小判" style="width:40px;height:auto;display:block;">`;
 const FLYING_KOBAN_SVG = `<img src="flying_koban.svg" alt="小判（羽根つき）" style="width:48px;height:auto;display:block;">`;
 
-
 /* 兵庫県内の史跡（案内マス用データ）
    座標(x, y)は盤面0〜9の固定マス指定。
    ※以下2点は元データを補正しています:
@@ -481,6 +480,16 @@ function isInfoSpot(x, y) {
   return HISTORICAL_SITES.some(s => s.x === x && s.y === y);
 }
 
+/* 海エリア（MASK）：スタート・ゴール・茶屋・旅籠・小判・逆さ小判を配置しない */
+const MASK = [
+  {x:1, y:7}, {x:2, y:7}, {x:3, y:7}, {x:4, y:7}, {x:5, y:7}, {x:6, y:7}, {x:7, y:7},
+  {x:0, y:8}, {x:1, y:8}, {x:2, y:8}, {x:3, y:8}, {x:4, y:8}, {x:5, y:8}, {x:6, y:8}, {x:7, y:8}, {x:8, y:8},
+  {x:0, y:9}, {x:1, y:9}, {x:2, y:9}, {x:3, y:9}, {x:4, y:9}, {x:5, y:9}, {x:6, y:9}, {x:7, y:9},
+];
+function isMasked(x, y) {
+  return MASK.some(m => m.x === x && m.y === y);
+}
+
 /* ===== スタート・ゴールをランダムに決める ===== */
 let STARTPOS = null;
 let GOALPOS = null;
@@ -494,19 +503,19 @@ function manhattan(a, b) {
 function pickStartAndGoal() {
   let start, goal, tries;
 
-  // 史跡マスは避けてスタート位置を決める
+  // 史跡マス・海（MASK）は避けてスタート位置を決める
   tries = 0;
   do {
     start = randomPos();
     tries++;
-  } while (isInfoSpot(start.x, start.y) && tries < 500);
+  } while ((isInfoSpot(start.x, start.y) || isMasked(start.x, start.y)) && tries < 500);
 
-  // 史跡マスを避け、かつスタートからある程度離れた場所をゴールにする
+  // 史跡マス・海（MASK）を避け、かつスタートからある程度離れた場所をゴールにする
   tries = 0;
   do {
     goal = randomPos();
     tries++;
-  } while ((isInfoSpot(goal.x, goal.y) || manhattan(start, goal) < 8) && tries < 500);
+  } while ((isInfoSpot(goal.x, goal.y) || isMasked(goal.x, goal.y) || manhattan(start, goal) < 8) && tries < 500);
 
   return { start, goal };
 }
@@ -516,36 +525,18 @@ function generateBoard() {
   STARTPOS = start;
   GOALPOS = goal;
 
+  // まず全マスを「normal（何もなし）」で初期化
   const board = [];
   for (let y = 0; y < GRID; y++) {
     const row = [];
     for (let x = 0; x < GRID; x++) {
-      if (x === start.x && y === start.y) {
-        row.push({ type: 'start', label: 'スタート', icon: '🏁' });
-      } else if (x === goal.x && y === goal.y) {
-        row.push({ type: 'goal', label: 'ゴール', icon: '🎌' });
-      } else if (isInfoSpot(x, y)) {
-        // 史跡マスはあとでまとめて設定するため、ここでは仮置き
-        row.push({ type: 'normal', label: '', icon: '' });
-      } else {
-        const r = Math.random();
-        if (r < 0.18) {
-          const amount = (Math.floor(Math.random() * 4) + 1) * 100;
-          row.push({ type: 'event-money', label: `+${amount}`, icon: KOBAN_SVG, amount });
-        } else if (r < 0.32) {
-          const amount = (Math.floor(Math.random() * 3) + 1) * 100;
-          row.push({ type: 'event-loss', label: `-${amount}`, icon: FLYING_KOBAN_SVG, amount });
-        } else if (r < 0.36) {
-          row.push({ type: 'event-teahouse', label: '茶屋', icon: '🍡' });
-        } else if (r < 0.40) {
-          row.push({ type: 'event-inn', label: '旅籠', icon: '🏮' });
-        } else {
-          row.push({ type: 'normal', label: '', icon: '' });
-        }
-      }
+      row.push({ type: 'normal', label: '', icon: '' });
     }
     board.push(row);
   }
+
+  board[start.y][start.x] = { type: 'start', label: 'スタート', icon: '🏁' };
+  board[goal.y][goal.x] = { type: 'goal', label: 'ゴール', icon: '🎌' };
 
   // 史跡の案内マス（iマーク）を指定座標に固定配置
   HISTORICAL_SITES.forEach(site => {
@@ -556,6 +547,46 @@ function generateBoard() {
       site,
     };
   });
+
+  // スタート・ゴール・史跡マス・海（MASK）を除いた配置候補マスを集める
+  const candidates = [];
+  for (let y = 0; y < GRID; y++) {
+    for (let x = 0; x < GRID; x++) {
+      const isStart = (x === start.x && y === start.y);
+      const isGoal = (x === goal.x && y === goal.y);
+      if (!isStart && !isGoal && !isInfoSpot(x, y) && !isMasked(x, y)) {
+        candidates.push({ x, y });
+      }
+    }
+  }
+  // シャッフル
+  for (let i = candidates.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+  }
+
+  // 小判(+)・逆さ小判(-)・茶屋・旅籠を、それぞれ3マスずつ固定個数で配置
+  const COUNT_PER_TYPE = 3;
+  let cursor = 0;
+
+  for (let i = 0; i < COUNT_PER_TYPE && cursor < candidates.length; i++, cursor++) {
+    const { x, y } = candidates[cursor];
+    const amount = (Math.floor(Math.random() * 4) + 1) * 100;
+    board[y][x] = { type: 'event-money', label: `+${amount}`, icon: KOBAN_SVG, amount };
+  }
+  for (let i = 0; i < COUNT_PER_TYPE && cursor < candidates.length; i++, cursor++) {
+    const { x, y } = candidates[cursor];
+    const amount = (Math.floor(Math.random() * 3) + 1) * 100;
+    board[y][x] = { type: 'event-loss', label: `-${amount}`, icon: FLYING_KOBAN_SVG, amount };
+  }
+  for (let i = 0; i < COUNT_PER_TYPE && cursor < candidates.length; i++, cursor++) {
+    const { x, y } = candidates[cursor];
+    board[y][x] = { type: 'event-teahouse', label: '茶屋', icon: '🍡' };
+  }
+  for (let i = 0; i < COUNT_PER_TYPE && cursor < candidates.length; i++, cursor++) {
+    const { x, y } = candidates[cursor];
+    board[y][x] = { type: 'event-inn', label: '旅籠', icon: '🏮' };
+  }
 
   return board;
 }

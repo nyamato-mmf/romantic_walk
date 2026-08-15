@@ -461,19 +461,25 @@ const KOBAN_SVG = `<img src="koban.svg" alt="小判" style="width:40px;height:au
 const FLYING_KOBAN_SVG = `<img src="flying_koban.svg" alt="小判（羽根つき）" style="width:48px;height:auto;display:block;">`;
 
 
-/* 兵庫県内の史跡（案内マス用データ） */
+/* 兵庫県内の史跡（案内マス用データ）
+   座標(x, y)は盤面0〜9の固定マス指定。
+   ※以下2点は元データを補正しています:
+     - (10,7)→(9,7)、(10,6)→(9,6)：盤面が0〜9のため範囲内に補正
+     - 篠山城跡と生野銀山が共に(9,3)で重複していたため、生野銀山を隣接する(9,2)に調整 */
 const HISTORICAL_SITES = [
-  { title: '姫路城', desc: '白鷺城とも呼ばれる白亜の名城。江戸時代初期の姿をほぼそのまま残す天守群は、日本で最初にユネスコ世界文化遺産に登録された。' },
-  { title: '竹田城跡', desc: '朝霧に包まれると山の上に浮かんで見えることから「天空の城」と呼ばれる山城跡。石垣だけが残り、往時の壮大な姿を今に伝える。' },
-  { title: '明石城', desc: '江戸幕府によって築かれた城で、天守は築かれなかったものの、現存する巽櫓・坤櫓の2つの三重櫓が今も明石のシンボルとして残る。' },
-  { title: '赤穂城跡', desc: '赤穂浪士で知られる赤穂藩の居城跡。忠臣蔵の舞台としても有名で、大石内蔵助ら家臣が仕えた城として語り継がれている。' },
-  { title: '出石城跡・辰鼓楼', desc: '但馬の小京都と呼ばれる出石のシンボル。城下町には時計台「辰鼓楼」がそびえ、古い町並みが今も残っている。' },
-  { title: '篠山城跡', desc: '徳川家康の命により天下普請で築かれた城。大書院が復元され、丹波篠山の城下町の中心として親しまれている。' },
-  { title: '有馬温泉', desc: '日本三古湯の一つに数えられる、1300年以上の歴史を持つ名湯。豊臣秀吉も度々訪れたと伝わる、歴史ある温泉街。' },
-  { title: '伊弉諾神宮', desc: '淡路島にある、日本最古とされる神社の一つ。国生み神話の主神である伊弉諾尊を祀り、古くから信仰を集めてきた。' },
-  { title: '湊川神社', desc: '南北朝時代の武将・楠木正成を祀る神戸の神社。忠義の武将として今も多くの人々に慕われている。' },
-  { title: '生野銀山', desc: '平安時代からの歴史を持つ日本有数の銀山跡。江戸時代には幕府直轄の鉱山として栄え、日本の近代化にも貢献した。' },
+  { x: 6, y: 4, title: '姫路城', desc: '白鷺城とも呼ばれる白亜の名城。江戸時代初期の姿をほぼそのまま残す天守群は、日本で最初にユネスコ世界文化遺産に登録された。' },
+  { x: 8, y: 1, title: '竹田城跡', desc: '朝霧に包まれると山の上に浮かんで見えることから「天空の城」と呼ばれる山城跡。石垣だけが残り、往時の壮大な姿を今に伝える。' },
+  { x: 9, y: 7, title: '明石城', desc: '江戸幕府によって築かれた城で、天守は築かれなかったものの、現存する巽櫓・坤櫓の2つの三重櫓が今も明石のシンボルとして残る。' },
+  { x: 7, y: 3, title: '篠山城跡', desc: '徳川家康の命により天下普請で築かれた城。大書院が復元され、丹波篠山の城下町の中心として親しまれている。' },
+  { x: 8, y: 6, title: '有馬温泉', desc: '日本三古湯の一つに数えられる、1300年以上の歴史を持つ名湯。豊臣秀吉も度々訪れたと伝わる、歴史ある温泉街。' },
+  { x: 8, y: 2, title: '生野銀山', desc: '平安時代からの歴史を持つ日本有数の銀山跡。江戸時代には幕府直轄の鉱山として栄え、日本の近代化にも貢献した。' },
+  { x: 2, y: 3, title: '龍野', desc: '揖保川沿いに発展した歴史ある城下町。龍野城跡を中心に、武家屋敷や白壁の町並みが残り、「播磨の小京都」とも呼ばれる。' },
+  { x: 0, y: 7, title: '赤穂城跡', desc: '赤穂浪士で知られる赤穂藩の居城跡。忠臣蔵の舞台としても有名で、大石内蔵助ら家臣が仕えた城として語り継がれている。' },
+  { x: 3, y: 2, title: '旧古井家住宅（千年家）', desc: '兵庫県姫路市に残る古民家で、室町時代後期に建てられたとされる貴重な民家。日本最古級の民家の一つとして知られ、「千年家」の名で親しまれている。' },
 ];
+function isInfoSpot(x, y) {
+  return HISTORICAL_SITES.some(s => s.x === x && s.y === y);
+}
 
 /* ===== スタート・ゴールをランダムに決める ===== */
 let STARTPOS = null;
@@ -486,14 +492,22 @@ function manhattan(a, b) {
   return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 }
 function pickStartAndGoal() {
-  const start = randomPos();
-  let goal = randomPos();
-  let tries = 0;
-  // ある程度離れた場所をゴールにする（近すぎるとすぐ終わってしまうため）
-  while (manhattan(start, goal) < 8 && tries < 300) {
+  let start, goal, tries;
+
+  // 史跡マスは避けてスタート位置を決める
+  tries = 0;
+  do {
+    start = randomPos();
+    tries++;
+  } while (isInfoSpot(start.x, start.y) && tries < 500);
+
+  // 史跡マスを避け、かつスタートからある程度離れた場所をゴールにする
+  tries = 0;
+  do {
     goal = randomPos();
     tries++;
-  }
+  } while ((isInfoSpot(goal.x, goal.y) || manhattan(start, goal) < 8) && tries < 500);
+
   return { start, goal };
 }
 
@@ -510,6 +524,9 @@ function generateBoard() {
         row.push({ type: 'start', label: 'スタート', icon: '🏁' });
       } else if (x === goal.x && y === goal.y) {
         row.push({ type: 'goal', label: 'ゴール', icon: '🎌' });
+      } else if (isInfoSpot(x, y)) {
+        // 史跡マスはあとでまとめて設定するため、ここでは仮置き
+        row.push({ type: 'normal', label: '', icon: '' });
       } else {
         const r = Math.random();
         if (r < 0.18) {
@@ -530,28 +547,13 @@ function generateBoard() {
     board.push(row);
   }
 
-  // 史跡の案内マス（iマーク）を、スタート・ゴールを除く場所にランダムで10箇所配置
-  const candidates = [];
-  for (let y = 0; y < GRID; y++) {
-    for (let x = 0; x < GRID; x++) {
-      const isStart = (x === start.x && y === start.y);
-      const isGoal = (x === goal.x && y === goal.y);
-      if (!isStart && !isGoal) {
-        candidates.push({ x, y });
-      }
-    }
-  }
-  for (let i = candidates.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
-  }
-  const infoSpots = candidates.slice(0, HISTORICAL_SITES.length);
-  infoSpots.forEach((spot, i) => {
-    board[spot.y][spot.x] = {
+  // 史跡の案内マス（iマーク）を指定座標に固定配置
+  HISTORICAL_SITES.forEach(site => {
+    board[site.y][site.x] = {
       type: 'info',
       label: 'i',
       icon: 'ℹ️',
-      site: HISTORICAL_SITES[i],
+      site,
     };
   });
 

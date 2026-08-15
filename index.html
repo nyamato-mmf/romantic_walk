@@ -460,6 +460,7 @@ const PLAYER_NAMES = ['武士', '町娘'];
 const KOBAN_SVG = `<img src="koban.svg" alt="小判" style="width:40px;height:auto;display:block;">`;
 const FLYING_KOBAN_SVG = `<img src="flying_koban.svg" alt="小判（羽根つき）" style="width:48px;height:auto;display:block;">`;
 
+
 /* 兵庫県内の史跡（案内マス用データ）
    座標(x, y)は盤面0〜9の固定マス指定。
    ※以下2点は元データを補正しています:
@@ -679,7 +680,7 @@ function showInfoCard(site, onClose) {
 
 /* ===== ゲーム結果ポップアップ ===== */
 function showResultPopup(arrivedPlayer) {
-  resultHeadlineEl.textContent = `${arrivedPlayer.name}が先にゴールに到着！（+3,000両ボーナス）`;
+  resultHeadlineEl.textContent = `${arrivedPlayer.name}が先にゴールに到着！（+1,000両ボーナス）`;
 
   const sorted = [...players].sort((a, b) => b.money - a.money);
   const isTie = sorted[0].money === sorted[1].money;
@@ -837,7 +838,8 @@ function landOnCell(player) {
   } else if (cell.type === 'goal') {
     msg += ' ゴール！';
   } else if (cell.type === 'info') {
-    msg += ' 案内板を見つけた！';
+    player.money += 300;
+    msg += ' 案内板を見つけた！ 300両もらった！';
   }
 
   remainingSteps = 0;
@@ -907,8 +909,8 @@ function endGame(arrivedPlayer) {
   rollBtn.disabled = true;
   restartBtn.style.display = 'inline-block';
 
-  // 先にゴールしたプレイヤーに3,000両ボーナス
-  arrivedPlayer.money += 3000;
+  // 先にゴールしたプレイヤーに1,000両ボーナス
+  arrivedPlayer.money += 1000;
 
   renderHeader();
   updateDpad();

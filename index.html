@@ -7,6 +7,13 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Yuji+Syuku&display=swap" rel="stylesheet">
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/three.module.min.js"
+  }
+}
+</script>
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body {
@@ -210,6 +217,43 @@
     background-position: center;
     transition: transform 1.6s cubic-bezier(0.4, 0.0, 0.2, 1);
     will-change: transform;
+  }
+  /* 3Dモデル（姫路城）を重ねるレイヤー。#boardと同じtransformを常に適用し、
+     カメラのパン・ズームに完全同期させる。renderBoard()での再描画では消えない
+     ように#boardの外側（同じ#board-viewport内）に独立して置いている */
+  #castle-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 1500px;
+    height: 1500px;
+    transform-origin: 0 0;
+    transition: transform 1.6s cubic-bezier(0.4, 0.0, 0.2, 1);
+    pointer-events: none;
+    will-change: transform;
+  }
+  #castle-mount {
+    position: absolute;
+    left: 847.5px;   /* x=12マス目 中央寄せ */
+    top: 580px;      /* y=9マス目の底に立つ高さ */
+    width: 180px;
+    height: 220px;
+    pointer-events: none;
+  }
+  #castle-mount canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+  #castle-loading {
+    position: absolute;
+    left: 0; right: 0; bottom: 6px;
+    text-align: center;
+    font-size: 9px;
+    color: #ead9ad;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+    letter-spacing: 0.1em;
+    pointer-events: none;
   }
   .cell {
     position: relative;
@@ -501,6 +545,11 @@
   <div id="board-wrap">
     <div id="board-viewport">
       <div id="board"></div>
+      <div id="castle-layer">
+        <div id="castle-mount">
+          <div id="castle-loading">姫路城 読込中…</div>
+        </div>
+      </div>
     </div>
   </div>
   <div id="camera-controls">
@@ -745,6 +794,7 @@ const resultChampionEl = document.getElementById('result-champion');
 const resultCloseBtn = document.getElementById('result-close');
 const btnOverview = document.getElementById('btn-overview');
 const btnFollow = document.getElementById('btn-follow');
+const castleLayerEl = document.getElementById('castle-layer');
 
 /* ===== カメラ（現在のキャラクターを中心に映す／全体を見る） ===== */
 let cameraMode = 'follow'; // 'follow' | 'overview'
@@ -765,6 +815,7 @@ function centerCameraOn(x, y) {
   tx = Math.max(minTx, Math.min(maxTx, tx));
   ty = Math.max(minTy, Math.min(maxTy, ty));
   boardEl.style.transform = `translate(${tx}px, ${ty}px) scale(1)`;
+  castleLayerEl.style.transform = boardEl.style.transform; // 3D姫路城レイヤーも同じカメラ挙動に同期
 }
 
 function showOverview() {
@@ -778,6 +829,7 @@ function showOverview() {
   const offsetX = (VIEWPORT_WIDTH - scaledSize) / 2;
   const offsetY = (VIEWPORT_HEIGHT - scaledSize) / 2;
   boardEl.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${s})`;
+  castleLayerEl.style.transform = boardEl.style.transform; // 3D姫路城レイヤーも同じカメラ挙動に同期
 }
 
 function showCurrentLocation() {
@@ -1178,8 +1230,8 @@ document.querySelectorAll('.character-option').forEach(btn => {
    伊能図ふうpixelアート（pixel_art_output.png）は
    #board の background-image として設定し、
    #board-viewport（440×300px）という窓から盤面を映している。
-   マスを半分サイズ(37.5px)にしたことで盤面全体は375×375pxとなり、
-   横方向は窓より小さいため常に全体が見え、縦方向のみカメラが追従してパンする。
+   盤面は20×20マス・1500×1500pxで、常にキャラクターを中心に
+   ズームしながら縦横にカメラがパンする。
    「全体」ボタンで scale を縮小して盤面全体を、
    「現在地」ボタンで現在の手番のキャラクターにカメラを戻す
    ========================================================= */
@@ -1189,6 +1241,135 @@ messageEl.textContent = `スタート(${STARTPOS.x}, ${STARTPOS.y})からゴー�
 renderAll();
 updateDpad();
 centerCameraOn(players[currentPlayer].x, players[currentPlayer].y);
+</script>
+
+<script type="module">
+/* =========================================================
+   姫路城 3Dモデル表示（x=12, y=9マス目）
+   OBJ/MTLはユーザー提供データ（右手座標系・Y軸が高さ）を、
+   そのままThree.js（同じく右手系・Y-up）に読み込んで表示している。
+   #castle-mount はCSSで固定座標に配置し、カメラのパン・ズームは
+   #castle-layer の transform を #board と同期させることで実現（index.html側）。
+   ========================================================= */
+import * as THREE from 'three';
+import { MTLLoader } from './vendor/three/MTLLoader.js';
+import { OBJLoader } from './vendor/three/OBJLoader.js';
+
+const MOUNT_WIDTH = 180;
+const MOUNT_HEIGHT = 220;
+const CASTLE_TARGET_HEIGHT = 1.8; // シーン内でのモデルの目標の高さ（従来の50%サイズ）
+
+function initCastle3D() {
+  const mount = document.getElementById('castle-mount');
+  const loadingEl = document.getElementById('castle-loading');
+  if (!mount) return;
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(32, MOUNT_WIDTH / MOUNT_HEIGHT, 0.1, 100);
+  // Z軸を「上」として扱う（Z-up）。Three.jsは既定でY-upのため、
+  // カメラの上方向ベクトルをZに切り替え、位置・注視点もZを高さとして指定する
+  camera.up.set(0, 0, 1);
+  camera.position.set(5.2, 5.6, 2.1);
+  camera.lookAt(0, 0, CASTLE_TARGET_HEIGHT * 0.46);
+
+  let renderer;
+  try {
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  } catch (e) {
+    if (loadingEl) loadingEl.textContent = '3D表示に対応していません';
+    return;
+  }
+  renderer.setSize(MOUNT_WIDTH, MOUNT_HEIGHT);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.domElement.style.opacity = '0';
+  renderer.domElement.style.transition = 'opacity 0.8s ease';
+  mount.appendChild(renderer.domElement);
+
+  scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+  const dirLight = new THREE.DirectionalLight(0xfff2d0, 1.0);
+  dirLight.position.set(5, 4, 8);
+  scene.add(dirLight);
+  const fillLight = new THREE.DirectionalLight(0xbcd4ff, 0.35);
+  fillLight.position.set(-4, -3, 3);
+  scene.add(fillLight);
+
+  const group = new THREE.Group();
+  scene.add(group);
+
+  const mtlLoader = new MTLLoader();
+  mtlLoader.load(
+    'Casstle_All_50mm.mtl',
+    (materials) => {
+      materials.preload();
+      // 元データはマテリアル名(色の16進コード)に対してKdのR/Bチャンネルが
+      // 入れ替わって出力されているため、名前から正しい色を復元する
+      Object.values(materials.materials).forEach((mat) => {
+        const m = /^color_([0-9a-fA-F]{6})$/.exec(mat.name || '');
+        if (m && mat.color) {
+          mat.color.setStyle('#' + m[1]);
+        }
+      });
+      const objLoader = new OBJLoader();
+      objLoader.setMaterials(materials);
+      objLoader.load(
+        'Casstle_All_50mm.obj',
+        (obj) => {
+          // 元データはY-upなので、まず生の寸法からスケールを決める
+          const rawBox = new THREE.Box3().setFromObject(obj);
+          const rawSize = new THREE.Vector3();
+          rawBox.getSize(rawSize);
+          const scale = CASTLE_TARGET_HEIGHT / (rawSize.y || 1);
+          obj.scale.setScalar(scale);
+
+          // 元データに法線(vn)が含まれていないため、陰影計算のために自動計算する
+          obj.traverse((child) => {
+            if (child.isMesh && child.geometry) {
+              child.geometry.computeVertexNormals();
+            }
+          });
+
+          // Y-up → Z-up への変換：X軸まわりに+90度回転させることで、
+          // 高さ方向がYからZへ移る（先にスケール・回転を確定させてから位置を合わせる）
+          obj.rotation.x = Math.PI / 2;
+
+          // 回転後の実際のバウンディングボックスを基準に、中心をX/Yに、底面をZ=0に合わせる
+          const box = new THREE.Box3().setFromObject(obj);
+          const center = new THREE.Vector3();
+          box.getCenter(center);
+          obj.position.set(-center.x, -center.y, -box.min.z);
+
+          group.add(obj);
+          renderer.render(scene, camera); // 自動回転はしないため、読み込み完了時に一度だけ描画
+          renderer.domElement.style.opacity = '1';
+          if (loadingEl) loadingEl.remove();
+        },
+        (xhr) => {
+          if (loadingEl && xhr.total) {
+            const pct = Math.round((xhr.loaded / xhr.total) * 100);
+            loadingEl.textContent = `姫路城 読込中… ${pct}%`;
+          }
+        },
+        (err) => {
+          console.error('姫路城モデルの読み込みに失敗しました', err);
+          if (loadingEl) loadingEl.textContent = '姫路城モデルの読込に失敗しました';
+        }
+      );
+    },
+    undefined,
+    (err) => {
+      console.error('姫路城マテリアルの読み込みに失敗しました', err);
+      if (loadingEl) loadingEl.textContent = '姫路城モデルの読込に失敗しました';
+    }
+  );
+
+  renderer.render(scene, camera); // 初期状態（モデル読み込み前）の空シーンを一度描画
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initCastle3D);
+} else {
+  initCastle3D();
+}
 </script>
 </body>
 </html>
